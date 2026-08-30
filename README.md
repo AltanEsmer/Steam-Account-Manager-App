@@ -8,6 +8,12 @@
   <h1>Steam Account Manager</h1>
 </div>
 
+## ⚠️ Important Disclaimer
+
+**Steam Account Manager is an unofficial, third-party application and is NOT affiliated with, endorsed by, or associated with Valve Corporation or Steam.** This application is provided as-is for educational and personal use. Users assume all responsibility and risk when using this application. The developers are not liable for any account losses, security incidents, or violations of Steam's Terms of Service. Use at your own risk.
+
+---
+
 Steam Account Manager is an Android APK application for securely managing multiple Steam accounts and Steam-related browsing sessions in a local, isolated environment.
 
 ## Overview
