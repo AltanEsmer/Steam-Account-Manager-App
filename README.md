@@ -1,11 +1,11 @@
-# Steam Account Manager
-
 <div align="center">
   <img src="app-icon.png" alt="Steam Account Manager icon" width="180" height="180" />
   <br>
   <img src="https://img.shields.io/badge/version-v1.0.0-blue" alt="Version v1.0.0" />
   <br>
   <img src="https://img.shields.io/badge/Platform-Android-3DDC84?logo=android" alt="Made for Android" />
+  <br><br>
+  <h1>Steam Account Manager</h1>
 </div>
 
 Steam Account Manager is an Android APK application for securely managing multiple Steam accounts and Steam-related browsing sessions in a local, isolated environment.
