@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.SteamAccountManager" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/steam_bg</item>
+        <item name="android:navigationBarColor">@color/steam_bg</item>
+        <item name="android:windowBackground">@color/steam_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

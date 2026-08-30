@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Applies to Android 12+ (API 31+) cloud backup and device-to-device transfer.
+  Same policy as backup_rules.xml: configuration only, never session/credential data.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="database" path="." />
+        <include domain="sharedpref" path="." />
+        <exclude domain="sharedpref" path="secure_credentials.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="database" path="." />
+        <include domain="sharedpref" path="." />
+        <exclude domain="sharedpref" path="secure_credentials.xml" />
+    </device-transfer>
+</data-extraction-rules>

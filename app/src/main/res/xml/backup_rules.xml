@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Applies to Android < 12 (API < 31) full-backup.
+  Only the Room database's non-sensitive configuration tables and DataStore
+  preference file are included. All WebView data directories (app_webview*,
+  which hold cookies/localStorage/IndexedDB per session) and the encrypted
+  credential store are explicitly excluded, per the "never back up authenticated
+  sessions or secrets" requirement.
+-->
+<full-backup-content>
+    <include domain="database" path="." />
+    <include domain="sharedpref" path="." />
+
+    <!-- Explicit exclusions for app-specific sensitive or temporary files. -->
+    <exclude domain="sharedpref" path="secure_credentials.xml" />
+    <exclude domain="database" path="steam_account_manager.db-wal" />
+    <exclude domain="database" path="steam_account_manager.db-shm" />
+</full-backup-content>

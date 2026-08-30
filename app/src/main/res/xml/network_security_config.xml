@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext traffic is disabled app-wide by default. Custom websites are validated
+  to require HTTPS at creation time (see AddCustomWebsiteViewModel), so no
+  cleartext exceptions are declared here. If a future power-user setting allows
+  HTTP for a specific self-hosted custom site, it should be added here as a narrow,
+  explicit domain-config exception rather than a global cleartextTrafficPermitted.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

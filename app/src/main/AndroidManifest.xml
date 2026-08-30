@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <application
+        android:name=".SteamAccountManagerApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SteamAccountManager"
+        android:networkSecurityConfig="@xml/network_security_config"
+        tools:targetApi="34">
+
+        <!--
+          MainActivity hosts all Compose UI (home, add account, website picker,
+          settings, app lock). It runs in the default process and never creates a
+          WebView itself, so it is never subject to WebView's per-process data
+          directory restriction.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SteamAccountManager"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          BrowserActivity is the ONLY component in the app that ever instantiates a
+          WebView, and it deliberately runs in its own process (":browser").
+
+          This is the crux of the session-isolation design: WebView.setDataDirectorySuffix()
+          may only be called once per process, before the first WebView is created in
+          that process (see README "Session Architecture" section). To give every
+          accountId+websiteId pair a genuinely separate cookie / localStorage / IndexedDB
+          / cache directory, BrowserActivity's process is deliberately restarted every
+          time the user switches to a different account+website pair, with a
+          freshly-computed suffix supplied via the launch Intent. Only one session is
+          ever resident in memory at a time, which also keeps memory use bounded even
+          with ~20 accounts x 5 websites = ~100 possible sessions.
+        -->
+        <activity
+            android:name=".BrowserActivity"
+            android:exported="false"
+            android:process=":browser"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.SteamAccountManager"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
+        <!--
+          Runs in the :browser process (see attribute below, which pins a
+          manifest-registered receiver to a specific process regardless of who
+          sends the broadcast). Used by BrowserProcessController to cleanly tear
+          down the browser process before restarting it for a different session.
+        -->
+        <receiver
+            android:name=".browser.BrowserShutdownReceiver"
+            android:exported="false"
+            android:process=":browser">
+            <intent-filter>
+                <action android:name="com.steamaccountmanager.app.action.SHUTDOWN_BROWSER_PROCESS" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Runs in the default process; receives the avatar-detection broadcast from :browser. -->
+        <receiver
+            android:name=".browser.SteamProfileResultReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.steamaccountmanager.app.action.STEAM_PROFILE_DETECTED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- App lock is shown as its own activity so it can also gate task-switcher re-entry. -->
+        <activity
+            android:name=".ui.lock.AppLockActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SteamAccountManager"
+            android:excludeFromRecents="false" />
+
+    </application>
+</manifest>

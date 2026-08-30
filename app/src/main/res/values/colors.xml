@@ -1,0 +1,12 @@
+<resources>
+    <color name="steam_bg">#0F1115</color>
+    <color name="steam_surface">#1A1D24</color>
+    <color name="steam_surface_alt">#22262F</color>
+    <color name="steam_accent">#66C0F4</color>
+    <color name="steam_accent_dim">#417A9B</color>
+    <color name="steam_text_primary">#F2F4F7</color>
+    <color name="steam_text_secondary">#9AA3B2</color>
+    <color name="steam_success">#4CD787</color>
+    <color name="steam_warning">#F2B94D</color>
+    <color name="steam_error">#F26D6D</color>
+</resources>
