@@ -8,6 +8,7 @@ local.properties
 *.aab
 *.jks
 *.keystore
+keystore.properties
 *.class
 *.hprof
 *.orig

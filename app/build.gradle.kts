@@ -1,7 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+}
+
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
 }
 
 android {
@@ -28,15 +36,36 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    buildTypes {
-        release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+    signingConfigs {
+        create("release") {
+            val storeFilePath = System.getenv("SAMAPP_RELEASE_STORE_FILE")
+                ?: keystoreProperties.getProperty("storeFile")
+            val storePassword = System.getenv("SAMAPP_RELEASE_STORE_PASSWORD")
+                ?: keystoreProperties.getProperty("storePassword")
+            val keyAlias = System.getenv("SAMAPP_RELEASE_KEY_ALIAS")
+                ?: keystoreProperties.getProperty("keyAlias")
+            val keyPassword = System.getenv("SAMAPP_RELEASE_KEY_PASSWORD")
+                ?: keystoreProperties.getProperty("keyPassword")
+
+            if (!storeFilePath.isNullOrBlank() && !storePassword.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
+                storeFile = rootProject.file(storeFilePath)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
         }
+    }
+
+    buildTypes {
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
