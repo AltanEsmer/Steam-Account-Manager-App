@@ -88,9 +88,14 @@ class PrototypeContractTest {
     }
 
     @Test
-    fun `install discovery click and popup never imply active`() {
+    fun `visible status can be recorded only after matching official popup opened`() {
         val tracking = PrototypeTracking()
         tracking.actionAvailable()
+        tracking.recordVisibleOfficialStatus()
+        tracking.popupOpened(99L)
+        tracking.recordVisibleOfficialStatus()
+
+        assertEquals(TrackingState.READY, tracking.state)
         val request = tracking.requestAction {}
         tracking.popupOpened(requireNotNull(request))
 
