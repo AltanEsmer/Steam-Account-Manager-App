@@ -146,6 +146,38 @@ class PrototypeContractTest {
     }
 
     @Test
+    fun `null terminal callbacks do nothing without an in-flight request`() {
+        val tracking = PrototypeTracking().apply { actionAvailable() }
+
+        tracking.popupOpened(null)
+        tracking.popupFailed(null)
+        tracking.actionClickFailed(null)
+        tracking.recordVisibleOfficialStatus()
+
+        assertEquals(TrackingState.READY, tracking.state)
+        assertFalse(tracking.officialSurfaceOpened)
+        assertEquals(null, tracking.inFlightRequestId)
+    }
+
+    @Test
+    fun `completed request token cannot complete newer request after recovery`() {
+        val tracking = PrototypeTracking().apply { actionAvailable() }
+        val first = requireNotNull(tracking.requestAction {})
+        tracking.popupFailed(first)
+        tracking.recover()
+        tracking.actionAvailable()
+        val second = requireNotNull(tracking.requestAction {})
+
+        tracking.popupOpened(first)
+
+        assertEquals(second, tracking.inFlightRequestId)
+        assertFalse(tracking.officialSurfaceOpened)
+        tracking.popupOpened(second)
+        assertEquals(null, tracking.inFlightRequestId)
+        assertTrue(tracking.officialSurfaceOpened)
+    }
+
+    @Test
     fun `simulation fails deterministically and recovery requires a new enabled action callback`() {
         val tracking = PrototypeTracking().apply { actionAvailable() }
         tracking.simulatePopupFailure()
