@@ -80,6 +80,25 @@ class PrototypeContractTest {
     }
 
     @Test
+    fun `cached action reuse requires fresh exact enabled same identity validation`() {
+        assertTrue(
+            canReuseValidatedAction(
+                CSFLOAT_ID,
+                CSFLOAT_VERSION,
+                CSFLOAT_ID,
+                CSFLOAT_VERSION,
+                discoveredEnabled = true,
+                hasEffectiveAction = true,
+            ),
+        )
+        assertFalse(canReuseValidatedAction(CSFLOAT_ID, CSFLOAT_VERSION, null, null, true, true))
+        assertFalse(canReuseValidatedAction(CSFLOAT_ID, CSFLOAT_VERSION, CSFLOAT_ID, CSFLOAT_VERSION, false, true))
+        assertFalse(canReuseValidatedAction(CSFLOAT_ID, CSFLOAT_VERSION, "other", CSFLOAT_VERSION, true, true))
+        assertFalse(canReuseValidatedAction(CSFLOAT_ID, CSFLOAT_VERSION, CSFLOAT_ID, "5.17.1", true, true))
+        assertFalse(canReuseValidatedAction(CSFLOAT_ID, CSFLOAT_VERSION, CSFLOAT_ID, CSFLOAT_VERSION, true, false))
+    }
+
+    @Test
     fun `all tracking states render without claiming live proof`() {
         assertEquals("GV-ACTION-UNAVAILABLE: Install and enable exact CSFloat first.", trackingMessage(TrackingState.UNAVAILABLE))
         assertEquals("GV-ACTION-READY: Official CSFloat action is ready. Live authenticated proof pending #7.", trackingMessage(TrackingState.READY))
