@@ -10,8 +10,8 @@ issue #7 `GO` decision.
 
 | Field | Value |
 | --- | --- |
-| App source commit and build variant | `9db111a5d9b0952a903da303eea3d17f00aa811a`, `debug` |
-| APK | `app/build/outputs/apk/debug/app-debug.apk`, 598,777,460 bytes, SHA-256 `72B618089423162DA6CD6405E536C5AB572D1781491D817452097B4BE001C58D`; preserved on the campaign host at `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle4\app-debug-72B61808.apk` |
+| App source commit and build variant | `8384c7743ae967877437238ef2af3114d5a972c8`, `debug` |
+| APK | `app/build/outputs/apk/debug/app-debug.apk`, 598,777,460 bytes, SHA-256 `1F9D16316B9A02EACC98BEE452C0708065AF53DB44A591FF087EF8C630263A1D`; preserved on the campaign host at `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle4\app-debug-1F9D1631.apk` |
 | Upstream baseline APK | Commit `8de0e23443250326afbf087346b8c6a7eef302b7`, `debug`, 63,099,195 bytes, SHA-256 `352A9BDA1FDFA2E11942F7BC9C794FB00C1F27762A9C591274230CE6BBED8FD2` |
 | GeckoView | `153.0.20260810162159`, stable Maven artifact |
 | CSFloat | Official signed Firefox artifact, ID `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}`, version `5.17.0`, GeckoView signed state `2` |
@@ -19,7 +19,7 @@ issue #7 `GO` decision.
 | Host | Windows 11 Pro 64-bit, version `10.0.26200`, build `26200`; Android Studio 2025.2.1 build `AI-252.25557.131.2521.14432022` |
 | Android target | Dedicated AVD `Codex_GeckoView_Campaign_API_36`, serial `emulator-5580`, Android 16/API 36, `x86_64`, Google Play image |
 | Emulator tooling | Android Emulator `36.2.12.0` build `14214601`; adb `36.0.0-13206524` |
-| Final report timestamps | Unit tests 2026-09-02 18:40:48 UTC; APK 18:40:56 UTC; instrumentation 18:42:11 UTC; lint 18:42:12 UTC; emulator matrix completed 19:02:14 UTC |
+| Final report timestamps | Unit tests 2026-09-02 19:17:06 UTC; APK 19:17:12 UTC; instrumentation 19:18:25 UTC; lint 19:18:26 UTC; emulator matrix completed 19:30:08 UTC |
 | Gate result | Issue #6 machine scenarios pass. Authenticated Steam state, live CSFloat tracking, physical-device behavior, navigation policy, and the issue #7 decision remain `NOT RUN`. |
 
 ## Selected isolation topology
@@ -61,12 +61,12 @@ Gradle instrumentation to the dedicated AVD, and every direct adb command used
 ```powershell
 $env:ANDROID_HOME='C:\Users\esmer\AppData\Local\Android\Sdk'
 $env:ANDROID_SERIAL='emulator-5580'
-.\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug lintDebug connectedDebugAndroidTest --rerun-tasks
-# exit 0: BUILD SUCCESSFUL in 1m43s; 35 unit tests, 10 instrumentation tests,
-# debug assembly, and lint all passed
+.\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug lintDebug connectedDebugAndroidTest processReleaseMainManifest mergeReleaseAssets --rerun-tasks
+# exit 0: BUILD SUCCESSFUL in 1m40s; 35 unit tests, 10 instrumentation tests,
+# debug assembly, lint, and release-exclusion inputs all passed
 
 $adb='C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
-& $adb -s emulator-5580 install -r C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle4\app-debug-72B61808.apk
+& $adb -s emulator-5580 install -r C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle4\app-debug-1F9D1631.apk
 & $adb -s emulator-5580 shell am start -W -n com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoPrototypeRouterActivity
 # exit 0: the exact APK installed and the exported router cold-launched. Select
 # Open synthetic slot A; the non-exported worker can be launched only with a slot.
@@ -74,7 +74,7 @@ $adb='C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
 & $adb -s emulator-5580 shell am force-stop com.steamaccountmanager.app.debug
 & $adb -s emulator-5580 shell am start -W -n com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoPrototypeRouterActivity
 # both exit 0: select Reopen selected slot in the router. The cycle-4 restart
-# evidence records the selected A profile and its disabled CSFloat state restored.
+# evidence records the selected A profile and its enabled CSFloat state restored.
 
 & $adb -s emulator-5580 shell ps -A
 # after Stop worker process reported GV-WORKER-STOPPED, filtering the output to
@@ -141,8 +141,8 @@ performance claims. Stored profiles did not cause the process count to grow.
 
 | State | Processes | Total proportional set size |
 | --- | ---: | ---: |
-| A active after the current-head isolation matrix | 7 | 605,658 KiB |
-| Router only after a current-head proven worker stop | 1 | 73,873 KiB |
+| A active after the current-head isolation matrix | 7 | 478,034 KiB |
+| Router only after a current-head proven worker stop | 1 | 76,076 KiB |
 
 The issue #6 debug APK is 535,678,265 bytes larger than the upstream-main debug
 baseline. This is a fat debug artifact containing GeckoView native binaries; it is
@@ -151,9 +151,11 @@ not a release-download or installed-size claim.
 ## Reviewable evidence and privacy
 
 Every PNG is an original 1080×2400 emulator capture. The first seven captures below
-record the pre-cycle-4 baseline at `9095a4d`; the `gv6-cycle4-*` captures record the
-current source commit `9db111a`. All captures and retained UI hierarchy XML were
-visually inspected before commit. They contain only the debug
+record the pre-cycle-4 baseline at `9095a4d`; the first `gv6-cycle4-*` group records
+the intermediate cycle-4 source commit `9db111a`; and the `gv6-cycle4-final-*` group
+records the final source commit `8384c77`. Only the final group is current proof.
+All captures and retained UI hierarchy XML were visually inspected before commit.
+They contain only the debug
 prototype, public fixture text, fixed `GV-*` status labels, and the official CSFloat
 consent surface. They contain no credentials, Steam Guard codes, QR login material,
 cookies, tokens, account identifiers, inventory, trade details, payment information,
@@ -187,6 +189,20 @@ or authentication UI.
   SHA-256 `4976335A87DED855AA45A831BEDD5649137BD183FAC40298574E2124C7086429`
 - [Cycle 4 repeated install consent](evidence/issue-6/gv6-cycle4-consent.png):
   SHA-256 `4DE383BCBADC3020A5E554C0F7913A6B9C5415993BCD0BA6745160A2B0B5091C`
+- [Final cycle 4 install consent](evidence/issue-6/gv6-cycle4-final-consent.png):
+  SHA-256 `E724153A2FF55810BF1968B88D2F90138811AE63369B7B52EA4090CD967CC7FE`
+- [Final cycle 4 A enabled](evidence/issue-6/gv6-cycle4-final-a-enabled.png):
+  SHA-256 `AA8CBDDD9108EF7D280551715D47623B88484F4428C7E7DBC6E822D527E3AC96`
+- [Final cycle 4 B remains independently enabled](evidence/issue-6/gv6-cycle4-final-b-isolated.png):
+  SHA-256 `A5EDCF8EE163042C5E5B31D792770AAD749F0C048087950E0DCD602977752444`
+- [Final cycle 4 revoked CSFloat state](evidence/issue-6/gv6-cycle4-final-revoked-state.png):
+  SHA-256 `EFEE11F733AE8A876C9EEA929A75645BD97E887863994EF3A468E0A1D950C9D0`
+- [Final cycle 4 revoked action controls](evidence/issue-6/gv6-cycle4-final-revoked-action.png):
+  SHA-256 `29DAD572A7ED89A141992E60700AAE16033D857FE7F7101616E46BA37CA7ABFC`
+- [Final cycle 4 complete worker stop](evidence/issue-6/gv6-cycle4-final-worker-stopped.png):
+  SHA-256 `0ACEABC574EB29EAB7CA27A8E417275229875E964D0AAF4E8C8F44960EB435C9`
+- [Final cycle 4 full restart restoration](evidence/issue-6/gv6-cycle4-final-full-restart.png):
+  SHA-256 `980AF88DDB5562B178B98BEF029D348A1F0643B3B7E2B4AC8998682C9B3C56B8`
 
 The XML evidence in `evidence/issue-6/` records fixed UI labels for A/B extension
 state, disable/uninstall isolation, lifecycle restoration, worker shutdown, and the
@@ -213,9 +229,10 @@ The original three-cycle repair budget was exhausted:
 After the third repair, two consecutive writer runs and one orchestrator run passed
 the complete 10-test instrumentation suite. The user then explicitly authorized
 exceptional repair cycle 4, which corrected fail-closed CSFloat action/tracking state
-after disable, uninstall, or a non-enabled refresh and expanded the process barrier
-to cover every app-owned Gecko child process while preserving graceful worker
-shutdown. No further issue #6 repair cycle is authorized.
+after disable, uninstall, a non-enabled refresh, mutation failure, or extension-list
+failure and expanded the process barrier to cover every app-owned Gecko child process
+while preserving graceful worker shutdown. No further issue #6 repair cycle is
+authorized.
 
 ## Known limitations and non-claims
 
