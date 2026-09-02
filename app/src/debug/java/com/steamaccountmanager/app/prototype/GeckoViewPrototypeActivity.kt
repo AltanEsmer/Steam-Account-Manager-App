@@ -2,7 +2,12 @@ package com.steamaccountmanager.app.prototype
 
 import android.app.AlertDialog
 import android.app.Dialog
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
+import android.os.Process
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -10,10 +15,13 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoRuntimeSettings
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
+import org.json.JSONObject
+import java.io.File
 
 class GeckoViewPrototypeActivity : ComponentActivity() {
     private lateinit var runtime: GeckoRuntime
@@ -25,6 +33,10 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private lateinit var recordStatusButton: Button
     private lateinit var simulateFailureButton: Button
     private lateinit var recoverButton: Button
+    private lateinit var markerStatus: TextView
+    private lateinit var extensionState: TextView
+    private lateinit var slot: String
+    private lateinit var profileId: String
     private var installDenied = false
     private var installFailure = PrototypeDiagnostic.INSTALL_FAILED
     private val tracking = PrototypeTracking()
@@ -36,9 +48,24 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private var popupView: GeckoView? = null
     private var popupSession: GeckoSession? = null
     private var pendingPopupRequestId: Long? = null
+    private var markerExtension: WebExtension? = null
+    private var shuttingDown = false
+
+    private val shutdownReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_SHUTDOWN) shutdownWorker()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        slot = intent.getStringExtra(EXTRA_SLOT).takeIf { it == "A" || it == "B" } ?: run {
+            finish()
+            return
+        }
+        profileId = slotProfileId(slot)
+        registerReceiver(shutdownReceiver, IntentFilter(ACTION_SHUTDOWN), RECEIVER_NOT_EXPORTED)
 
         status = TextView(this).apply {
             text = "Ready to install. The public Steam listing is loading."
@@ -79,6 +106,14 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 discoverAction()
             }
         }
+        markerStatus = TextView(this).apply {
+            text = "GV-MARKER-WAIT slot=$slot profile=$profileId"
+            setPadding(24, 8, 24, 8)
+        }
+        extensionState = TextView(this).apply {
+            text = "GV-CSFLOAT-STATE-UNKNOWN"
+            setPadding(24, 8, 24, 8)
+        }
         val metadata = TextView(this).apply {
             text = ARTIFACT_METADATA
             setPadding(24, 8, 24, 12)
@@ -95,6 +130,16 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 addView(recordStatusButton)
                 addView(simulateFailureButton)
                 addView(recoverButton)
+                addView(button("Open synthetic isolation marker") { loadSyntheticMarker() })
+                addView(button("Open public Steam listing") { session.loadUri(STEAM_LISTING_URL) })
+                addView(button("Recreate worker activity") { recreate() })
+                addView(button("Close worker screen") { finish() })
+                addView(extensionState)
+                addView(button("Disable CSFloat") { changeCsfloat("disable") })
+                addView(button("Enable CSFloat") { changeCsfloat("enable") })
+                addView(button("Uninstall CSFloat") { changeCsfloat("uninstall") })
+                addView(button("Reinstall CSFloat with consent") { installExtension() })
+                addView(markerStatus)
                 addView(metadata)
                 addView(
                     geckoView,
@@ -107,7 +152,23 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             },
         )
 
-        runtime = sharedRuntime ?: GeckoRuntime.create(applicationContext).also { sharedRuntime = it }
+        val root = File(noBackupFilesDir, "gecko-prototype-profiles").toPath()
+        val profile = requireContainedProfilePath(root, root.resolve(profileId)).toFile().apply { mkdirs() }
+        val existing = sharedRuntime
+        if (existing != null && sharedProfileId != profileId) {
+            status.text = "GV-PROFILE-MISMATCH: Worker restart required."
+            finish()
+            return
+        }
+        runtime = existing ?: GeckoRuntime.create(
+            applicationContext,
+            GeckoRuntimeSettings.Builder()
+                .arguments(arrayOf("--profile", profile.absolutePath))
+                .build(),
+        ).also {
+            sharedRuntime = it
+            sharedProfileId = profileId
+        }
         runtime.webExtensionController.promptDelegate = InstallConsentPrompt()
         session = GeckoSession().apply {
             progressDelegate = object : GeckoSession.ProgressDelegate {
@@ -117,22 +178,135 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                     }
                 }
             }
+            contentDelegate = object : GeckoSession.ContentDelegate {
+                override fun onTitleChange(session: GeckoSession, title: String?) {
+                    if (title?.matches(Regex("^GV6\\|slot=[AB]\\|cookie=[AB]\\|local=[AB]\\|idb=[AB]\\|nav=[AB]$")) == true) {
+                        runOnUiThread { markerStatus.text = title }
+                    }
+                }
+            }
             open(runtime)
-            loadUri(STEAM_LISTING_URL)
+            loadUri("http://127.0.0.1:$LOOPBACK_PORT/slot/$slot")
         }
         geckoView.setSession(session)
         runtime.webExtensionController.setTabActive(session, true)
         renderTracking()
         discoverAction()
+        installMarkerExtension()
+        refreshCsfloatState()
     }
 
     override fun onDestroy() {
+        unregisterReceiver(shutdownReceiver)
         closePopup()
         clearActionDelegates()
         runtime.webExtensionController.promptDelegate = null
         runtime.webExtensionController.setTabActive(session, false)
         session.close()
         super.onDestroy()
+    }
+
+    private fun button(label: String, action: () -> Unit) = Button(this).apply {
+        text = label
+        setOnClickListener { action() }
+    }
+
+    private fun loadSyntheticMarker() {
+        session.loadUri("http://127.0.0.1:$LOOPBACK_PORT/slot/$slot")
+    }
+
+    private fun installMarkerExtension() {
+        runtime.webExtensionController.installBuiltIn("resource://android/assets/issue6-marker/").accept(
+            { extension -> runOnUiThread {
+                if (extension?.id != MARKER_EXTENSION_ID) {
+                    markerStatus.text = "GV-MARKER-INSTALL-FAILED"
+                    return@runOnUiThread
+                }
+                markerExtension = extension
+                extension.setMessageDelegate(markerMessageDelegate, MARKER_NATIVE_APP)
+            } },
+            { runOnUiThread { markerStatus.text = "GV-MARKER-INSTALL-FAILED" } },
+        )
+    }
+
+    private val markerMessageDelegate = object : WebExtension.MessageDelegate {
+        override fun onMessage(
+            nativeApp: String,
+            message: Any,
+            sender: WebExtension.MessageSender,
+        ): GeckoResult<Any> {
+            if (nativeApp != MARKER_NATIVE_APP || sender.webExtension.id != MARKER_EXTENSION_ID ||
+                sender.environmentType != WebExtension.MessageSender.ENV_TYPE_EXTENSION || message !is JSONObject
+            ) return GeckoResult.fromValue(null)
+            return when (message.optString("type")) {
+                "read" -> GeckoResult.fromValue(JSONObject().put("slot", slot))
+                "result" -> {
+                    val reportedSlot = message.optString("slot")
+                    val prior = message.optString("prior")
+                    val current = message.optString("current")
+                    if (reportedSlot == slot && prior in setOf("A", "B") && current in setOf("A", "B")) {
+                        runOnUiThread {
+                            markerStatus.text = "GV-MARKER-RESULT slot=$slot prior=$prior current=$current profile=$profileId"
+                        }
+                    }
+                    GeckoResult.fromValue(JSONObject().put("accepted", true))
+                }
+                else -> GeckoResult.fromValue(null)
+            }
+        }
+    }
+
+    private fun refreshCsfloatState(after: (() -> Unit)? = null) {
+        runtime.webExtensionController.list().accept(
+            { extensions -> runOnUiThread {
+                val exact = extensions.orEmpty().singleOrNull { isExpectedCsfloat(it.id, it.metaData.version) }
+                extensionState.text = when {
+                    exact == null -> "GV-CSFLOAT-STATE-ABSENT slot=$slot"
+                    exact.metaData.enabled -> "GV-CSFLOAT-STATE-ENABLED slot=$slot"
+                    else -> "GV-CSFLOAT-STATE-DISABLED slot=$slot"
+                }
+                after?.invoke()
+            } },
+            { runOnUiThread { extensionState.text = "GV-CSFLOAT-STATE-FAILED" } },
+        )
+    }
+
+    private fun changeCsfloat(operation: String) {
+        runtime.webExtensionController.list().accept(
+            { extensions -> runOnUiThread {
+                val exact = extensions.orEmpty().singleOrNull { isExpectedCsfloat(it.id, it.metaData.version) }
+                if (exact == null) {
+                    extensionState.text = "GV-CSFLOAT-STATE-ABSENT slot=$slot"
+                } else {
+                    val result = when (operation) {
+                        "disable" -> runtime.webExtensionController.disable(exact, WebExtensionController.EnableSource.APP)
+                        "enable" -> runtime.webExtensionController.enable(exact, WebExtensionController.EnableSource.APP)
+                        else -> runtime.webExtensionController.uninstall(exact).map { exact }
+                    }
+                    result.accept(
+                        { refreshCsfloatState() },
+                        { runOnUiThread { extensionState.text = "GV-CSFLOAT-STATE-FAILED" } },
+                    )
+                }
+            } },
+            { runOnUiThread { extensionState.text = "GV-CSFLOAT-STATE-FAILED" } },
+        )
+    }
+
+    private fun shutdownWorker() {
+        if (shuttingDown) return
+        shuttingDown = true
+        closePopup()
+        clearActionDelegates()
+        markerExtension?.setMessageDelegate(null, MARKER_NATIVE_APP)
+        runtime.webExtensionController.promptDelegate = null
+        runtime.webExtensionController.setTabActive(session, false)
+        session.close()
+        runtime.shutdown()
+        sharedRuntime = null
+        sharedProfileId = null
+        finishAndRemoveTask()
+        Process.killProcess(Process.myPid())
     }
 
     private fun installExtension() {
@@ -465,6 +639,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
 
     private companion object {
         var sharedRuntime: GeckoRuntime? = null
+        var sharedProfileId: String? = null
 
         const val STEAM_LISTING_URL =
             "https://steamcommunity.com/market/listings/730/AK-47%20%7C%20Redline%20%28Field-Tested%29"

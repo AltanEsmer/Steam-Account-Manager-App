@@ -2,14 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <activity
-            android:name=".prototype.GeckoViewPrototypeActivity"
+            android:name=".prototype.GeckoPrototypeRouterActivity"
             android:exported="true"
-            android:label="CSFloat GeckoView Prototype"
-            android:process=":gecko_prototype">
+            android:label="Gecko profile isolation prototype">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".prototype.GeckoViewPrototypeActivity"
+            android:exported="false"
+            android:label="CSFloat GeckoView worker"
+            android:process=":gecko_prototype" />
     </application>
 </manifest>

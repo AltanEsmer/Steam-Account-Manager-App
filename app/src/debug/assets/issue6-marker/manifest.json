@@ -1,0 +1,10 @@
+{
+  "manifest_version": 2,
+  "name": "Issue 6 Isolation Marker",
+  "version": "1.0",
+  "browser_specific_settings": {
+    "gecko": { "id": "issue6-marker@steam-account-manager.invalid" }
+  },
+  "permissions": ["storage", "nativeMessaging"],
+  "background": { "scripts": ["background.js"] }
+}
