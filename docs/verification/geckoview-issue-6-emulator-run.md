@@ -95,8 +95,8 @@ Generated reports:
 
 | Contract | Result | Proof |
 | --- | --- | --- |
-| Stable isolated profile identity | PASS | Unit tests cover deterministic IDs, ambiguous input pairs, Unicode, empty-value rejection, and fixed-width redacted output. On-device A/B/A switching restored the correct engine-observed marker for A. |
-| Cookies, local storage, and IndexedDB | PASS | Instrumentation writes distinct engine-observed values for A and B, switches A → B → A, recreates the activity, closes/reopens the screen, restarts the worker, and force-stops/restarts the app. Values restore only in their owning profile. |
+| Stable isolated profile identity | PASS | Unit tests cover deterministic IDs, ambiguous input pairs, Unicode, distinct empty-value encodings, and fixed-width redacted output. On-device A/B/A switching restored the correct engine-observed marker for A. |
+| Cookies, local storage, and IndexedDB | PASS | Instrumentation writes distinct engine-observed values for A and B, switches A → B → A, recreates the activity, closes/reopens the screen, and restarts the worker. A separate exact-serial adb check force-stops/restarts the app. Values restore only in their owning profile. |
 | Extension storage | PASS | Debug marker version `1.4` writes distinct native-message-observed values in each profile. A restores its value after B, activity recreation, screen close/reopen, worker recreation, and full app restart. |
 | Official CSFloat installed/enabled state | PASS | A and B independently began absent, independently displayed the exact install consent, and independently enabled the same signed ID/version. Disabling or uninstalling A did not change B. Explicit enable restored only A. Reinstalling A repeated consent; denial left A absent and a later accepted retry restored only A. |
 | Repeated switching | PASS | Instrumentation and the manual emulator matrix switch repeatedly without cross-profile marker exposure. The runtime/process design keeps one active profile resident rather than all stored profiles. |
