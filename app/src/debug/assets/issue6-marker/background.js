@@ -1,6 +1,6 @@
 let attempts = 0;
 function connect() {
-  if (attempts++ >= 6) return;
+  if (attempts++ >= 30) return;
   try {
     const port = browser.runtime.connectNative("issue6Marker");
     port.onMessage.addListener(async message => {
