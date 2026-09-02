@@ -15,5 +15,13 @@
             android:exported="false"
             android:label="CSFloat GeckoView worker"
             android:process=":gecko_prototype" />
+        <receiver
+            android:name=".prototype.PrototypeWorkerShutdownReceiver"
+            android:exported="false"
+            android:process=":gecko_prototype">
+            <intent-filter>
+                <action android:name="com.steamaccountmanager.app.debug.PROTOTYPE_SHUTDOWN" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

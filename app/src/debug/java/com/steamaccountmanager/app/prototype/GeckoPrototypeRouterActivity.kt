@@ -2,10 +2,12 @@ package com.steamaccountmanager.app.prototype
 
 import android.app.ActivityManager
 import android.content.Context
+import android.content.BroadcastReceiver
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -23,6 +25,7 @@ internal const val EXTRA_GENERATION = "prototype_generation"
 internal const val LOOPBACK_PORT = 38947
 internal const val MARKER_EXTENSION_ID = "issue6-marker@steam-account-manager.invalid"
 internal const val MARKER_NATIVE_APP = "issue6Marker"
+private val GECKO_CHILD_NAMES = setOf("tab", "gpu", "crashhelper", "socket", "rdd", "utility", "extension")
 
 internal fun slotProfileId(slot: String): String = when (slot) {
     "A" -> geckoProfileId("synthetic-account-a", "synthetic-website")
@@ -71,6 +74,7 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
         val deadline = System.currentTimeMillis() + 8_000
         fun poll() {
             if (requestedGeneration != generation) return
+            terminateRecognizedGeckoChildren()
             if (!workerRunning()) authorize(slot)
             else if (System.currentTimeMillis() >= deadline) {
                 render("GV-PROFILE-SWITCH-TIMEOUT generation=$requestedGeneration")
@@ -90,7 +94,7 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
     }
 
     private fun stopWorker(requestedGeneration: Long?) {
-        sendBroadcast(Intent(ACTION_SHUTDOWN).setPackage(packageName).apply {
+        sendBroadcast(Intent(this, PrototypeWorkerShutdownReceiver::class.java).setAction(ACTION_SHUTDOWN).apply {
             requestedGeneration?.let { putExtra(EXTRA_GENERATION, it) }
         })
     }
@@ -99,7 +103,18 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
         val prefix = "$packageName:"
         return (getSystemService(ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses.orEmpty()
             .any { it.processName == "${packageName}:gecko_prototype" ||
-                (it.processName.startsWith(prefix) && it.processName.contains("tab")) }
+                (it.processName.startsWith(prefix) && GECKO_CHILD_NAMES.any { child ->
+                    it.processName.removePrefix(prefix).startsWith(child)
+                }) }
+    }
+
+    private fun terminateRecognizedGeckoChildren() {
+        val prefix = "$packageName:"
+        (getSystemService(ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses.orEmpty()
+            .filter { process -> process.processName.startsWith(prefix) && GECKO_CHILD_NAMES.any { child ->
+                process.processName.removePrefix(prefix).startsWith(child)
+            } }
+            .forEach { Process.killProcess(it.pid) }
     }
 
     private fun render(code: String) {
@@ -116,19 +131,23 @@ private object PrototypeLoopbackServer {
         Executors.newSingleThreadExecutor().execute {
             try {
                 ServerSocket(LOOPBACK_PORT, 8, InetAddress.getByName("127.0.0.1")).use { server ->
-                    while (true) server.accept().use { socket ->
-                        socket.soTimeout = 2_000
-                        val request = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII))
-                            .readLine().orEmpty()
-                        val slot = Regex("^GET /slot/([AB]) HTTP/1\\.[01]$").matchEntire(request)?.groupValues?.get(1)
-                        val body = if (slot == null) "<!doctype html><title>GV6|error=request</title>" else page(slot)
-                        val status = if (slot == null) "400 Bad Request" else "200 OK"
-                        val bytes = body.toByteArray(StandardCharsets.UTF_8)
-                        socket.getOutputStream().write(
-                            "HTTP/1.1 $status\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
-                                .toByteArray(StandardCharsets.US_ASCII),
-                        )
-                        socket.getOutputStream().write(bytes)
+                    while (true) try {
+                        server.accept().use { socket ->
+                            socket.soTimeout = 2_000
+                            val request = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII))
+                                .readLine().orEmpty()
+                            val slot = Regex("^GET /slot/([AB]) HTTP/1\\.[01]$").matchEntire(request)?.groupValues?.get(1)
+                            val body = if (slot == null) "<!doctype html><title>GV6|error=request</title>" else page(slot)
+                            val status = if (slot == null) "400 Bad Request" else "200 OK"
+                            val bytes = body.toByteArray(StandardCharsets.UTF_8)
+                            socket.getOutputStream().write(
+                                "HTTP/1.1 $status\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
+                                    .toByteArray(StandardCharsets.US_ASCII),
+                            )
+                            socket.getOutputStream().write(bytes)
+                        }
+                    } catch (_: Exception) {
+                        // A bounded client failure must not terminate the fixed test server.
                     }
                 }
             } catch (_: Exception) {
@@ -139,8 +158,14 @@ private object PrototypeLoopbackServer {
 
     private fun page(slot: String) = """<!doctype html><meta charset=utf-8><body><h1>Issue 6 synthetic slot $slot</h1><pre id=o>GV6|loading</pre><script>
 const s='$slot'; if(!document.cookie.includes('gv6='))document.cookie='gv6='+s+'; SameSite=Strict';
-if(!localStorage.gv6)localStorage.gv6=s;
-const n=history.state&&history.state.gv6||s;if(!history.state)history.replaceState({gv6:s},'',location.pathname+'#'+s);
+if(!localStorage.gv6)localStorage.gv6=s;if(!localStorage.gv6nav)localStorage.gv6nav=s;
+const n=localStorage.gv6nav;if(!history.state)history.replaceState({gv6:n},'',location.pathname+'#'+n);
 const q=indexedDB.open('gv6',1);q.onupgradeneeded=()=>q.result.createObjectStore('m');q.onsuccess=()=>{const d=q.result.transaction('m','readwrite').objectStore('m');const g=d.get('slot');g.onsuccess=()=>{const prior=g.result||s;if(!g.result)d.put(s,'slot');const c=(document.cookie.match(/gv6=([AB])/)||[])[1]||'missing';const l=localStorage.gv6||'missing';const text=`GV6|slot=${'$'}{s}|cookie=${'$'}{c}|local=${'$'}{l}|idb=${'$'}{prior}|nav=${'$'}{n}`;document.title=text;document.getElementById('o').textContent=text;};};
 </script></body>"""
+}
+
+class PrototypeWorkerShutdownReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_SHUTDOWN) GeckoViewPrototypeActivity.shutdownProcess()
+    }
 }

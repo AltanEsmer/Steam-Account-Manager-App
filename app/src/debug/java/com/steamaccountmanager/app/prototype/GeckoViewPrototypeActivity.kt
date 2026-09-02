@@ -2,11 +2,9 @@ package com.steamaccountmanager.app.prototype
 
 import android.app.AlertDialog
 import android.app.Dialog
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Process
 import android.view.ViewGroup
 import android.widget.Button
@@ -34,6 +32,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private lateinit var simulateFailureButton: Button
     private lateinit var recoverButton: Button
     private lateinit var markerStatus: TextView
+    private lateinit var engineStatus: TextView
     private lateinit var extensionState: TextView
     private lateinit var slot: String
     private lateinit var profileId: String
@@ -49,13 +48,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private var popupSession: GeckoSession? = null
     private var pendingPopupRequestId: Long? = null
     private var markerExtension: WebExtension? = null
-    private var shuttingDown = false
-
-    private val shutdownReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == ACTION_SHUTDOWN) shutdownWorker()
-        }
-    }
+    private var markerPort: WebExtension.Port? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,7 +58,6 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             return
         }
         profileId = slotProfileId(slot)
-        registerReceiver(shutdownReceiver, IntentFilter(ACTION_SHUTDOWN), RECEIVER_NOT_EXPORTED)
 
         status = TextView(this).apply {
             text = "Ready to install. The public Steam listing is loading."
@@ -110,6 +102,10 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             text = "GV-MARKER-WAIT slot=$slot profile=$profileId"
             setPadding(24, 8, 24, 8)
         }
+        engineStatus = TextView(this).apply {
+            text = "GV6|loading"
+            setPadding(24, 8, 24, 8)
+        }
         extensionState = TextView(this).apply {
             text = "GV-CSFLOAT-STATE-UNKNOWN"
             setPadding(24, 8, 24, 8)
@@ -124,6 +120,8 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(status)
+                addView(markerStatus)
+                addView(engineStatus)
                 addView(installButton)
                 addView(trackingStatus)
                 addView(actionButton)
@@ -139,7 +137,6 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 addView(button("Enable CSFloat") { changeCsfloat("enable") })
                 addView(button("Uninstall CSFloat") { changeCsfloat("uninstall") })
                 addView(button("Reinstall CSFloat with consent") { installExtension() })
-                addView(markerStatus)
                 addView(metadata)
                 addView(
                     geckoView,
@@ -181,7 +178,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             contentDelegate = object : GeckoSession.ContentDelegate {
                 override fun onTitleChange(session: GeckoSession, title: String?) {
                     if (title?.matches(Regex("^GV6\\|slot=[AB]\\|cookie=[AB]\\|local=[AB]\\|idb=[AB]\\|nav=[AB]$")) == true) {
-                        runOnUiThread { markerStatus.text = title }
+                        runOnUiThread { engineStatus.text = title }
                     }
                 }
             }
@@ -197,9 +194,16 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        unregisterReceiver(shutdownReceiver)
+        if (!::runtime.isInitialized || !::session.isInitialized) {
+            super.onDestroy()
+            return
+        }
         closePopup()
         clearActionDelegates()
+        markerPort?.disconnect()
+        markerPort = null
+        markerExtension?.setMessageDelegate(null, MARKER_NATIVE_APP)
+        markerExtension = null
         runtime.webExtensionController.promptDelegate = null
         runtime.webExtensionController.setTabActive(session, false)
         session.close()
@@ -216,7 +220,12 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun installMarkerExtension() {
-        runtime.webExtensionController.installBuiltIn("resource://android/assets/issue6-marker/").accept(
+        // Mozilla requires geckoViewAddons for background-script native messaging;
+        // this privilege exists only in the non-shipping acceptance fixture.
+        runtime.webExtensionController.ensureBuiltIn(
+            "resource://android/assets/issue6-marker/",
+            MARKER_EXTENSION_ID,
+        ).accept(
             { extension -> runOnUiThread {
                 if (extension?.id != MARKER_EXTENSION_ID) {
                     markerStatus.text = "GV-MARKER-INSTALL-FAILED"
@@ -224,23 +233,29 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 }
                 markerExtension = extension
                 extension.setMessageDelegate(markerMessageDelegate, MARKER_NATIVE_APP)
+                markerStatus.text = "GV-MARKER-DELEGATE-READY slot=$slot"
             } },
             { runOnUiThread { markerStatus.text = "GV-MARKER-INSTALL-FAILED" } },
         )
     }
 
     private val markerMessageDelegate = object : WebExtension.MessageDelegate {
-        override fun onMessage(
-            nativeApp: String,
-            message: Any,
-            sender: WebExtension.MessageSender,
-        ): GeckoResult<Any> {
-            if (nativeApp != MARKER_NATIVE_APP || sender.webExtension.id != MARKER_EXTENSION_ID ||
-                sender.environmentType != WebExtension.MessageSender.ENV_TYPE_EXTENSION || message !is JSONObject
-            ) return GeckoResult.fromValue(null)
-            return when (message.optString("type")) {
-                "read" -> GeckoResult.fromValue(JSONObject().put("slot", slot))
-                "result" -> {
+        override fun onConnect(port: WebExtension.Port) {
+            val sender = port.sender
+            if (port.name != MARKER_NATIVE_APP || sender.webExtension.id != MARKER_EXTENSION_ID ||
+                sender.environmentType != WebExtension.MessageSender.ENV_TYPE_EXTENSION
+            ) {
+                runOnUiThread { markerStatus.text = "GV-MARKER-SCHEMA-REJECTED slot=$slot" }
+                port.disconnect()
+                return
+            }
+            markerPort = port
+            port.setDelegate(object : WebExtension.PortDelegate {
+                override fun onPortMessage(message: Any, port: WebExtension.Port) {
+                    if (port !== markerPort || message !is JSONObject || message.optString("type") != "result") {
+                        runOnUiThread { markerStatus.text = "GV-MARKER-SCHEMA-REJECTED slot=$slot" }
+                        return
+                    }
                     val reportedSlot = message.optString("slot")
                     val prior = message.optString("prior")
                     val current = message.optString("current")
@@ -249,10 +264,12 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                             markerStatus.text = "GV-MARKER-RESULT slot=$slot prior=$prior current=$current profile=$profileId"
                         }
                     }
-                    GeckoResult.fromValue(JSONObject().put("accepted", true))
                 }
-                else -> GeckoResult.fromValue(null)
-            }
+                override fun onDisconnect(port: WebExtension.Port) {
+                    if (port === markerPort) markerPort = null
+                }
+            })
+            port.postMessage(JSONObject().put("type", "read").put("slot", slot))
         }
     }
 
@@ -291,22 +308,6 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             } },
             { runOnUiThread { extensionState.text = "GV-CSFLOAT-STATE-FAILED" } },
         )
-    }
-
-    private fun shutdownWorker() {
-        if (shuttingDown) return
-        shuttingDown = true
-        closePopup()
-        clearActionDelegates()
-        markerExtension?.setMessageDelegate(null, MARKER_NATIVE_APP)
-        runtime.webExtensionController.promptDelegate = null
-        runtime.webExtensionController.setTabActive(session, false)
-        session.close()
-        runtime.shutdown()
-        sharedRuntime = null
-        sharedProfileId = null
-        finishAndRemoveTask()
-        Process.killProcess(Process.myPid())
     }
 
     private fun installExtension() {
@@ -348,6 +349,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             installButton.isEnabled = false
             session.reload()
             discoverAction()
+            refreshCsfloatState()
             return
         }
 
@@ -637,9 +639,16 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         }
     }
 
-    private companion object {
+    companion object {
         var sharedRuntime: GeckoRuntime? = null
         var sharedProfileId: String? = null
+
+        fun shutdownProcess() {
+            sharedRuntime?.shutdown()
+            sharedRuntime = null
+            sharedProfileId = null
+            Handler(Looper.getMainLooper()).postDelayed({ Process.killProcess(Process.myPid()) }, 500)
+        }
 
         const val STEAM_LISTING_URL =
             "https://steamcommunity.com/market/listings/730/AK-47%20%7C%20Redline%20%28Field-Tested%29"
