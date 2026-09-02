@@ -1,0 +1,16 @@
+--------- beginning of main
+09-02 14:48:53.947 11992 11992 W Gecko   : type=1400 audit(0.0:522): avc:  denied  { read } for  name="product_name" dev="sysfs" ino=842 scontext=u:r:untrusted_app:s0:c221,c256,c512,c768 tcontext=u:object_r:sysfs:s0 tclass=file permissive=0 app=com.steamaccountmanager.app.debug
+09-02 14:48:53.947 11992 11992 W Gecko   : type=1400 audit(0.0:523): avc:  denied  { read } for  name="product_sku" dev="sysfs" ino=846 scontext=u:r:untrusted_app:s0:c221,c256,c512,c768 tcontext=u:object_r:sysfs:s0 tclass=file permissive=0 app=com.steamaccountmanager.app.debug
+09-02 14:48:55.146 11992 12173 W GeckoEventDispatcher: No listener for GeckoView:LocationChange
+09-02 14:49:05.656 11992 12016 W gecko_prototype: Suspending all threads took: 25.138ms
+09-02 14:49:45.335 11992 11992 W com.steamaccountmanager.app.debug:gecko_prototype: type=1400 audit(0.0:532): avc:  denied  { nlmsg_readpriv } for  comm=536F636B657420546872656164 scontext=u:r:untrusted_app:s0:c221,c256,c512,c768 tcontext=u:r:untrusted_app:s0:c221,c256,c512,c768 tclass=netlink_route_socket permissive=0 bug=b/155595000 app=com.steamaccountmanager.app.debug
+09-02 14:49:46.378 11992 11992 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda13@8185243
+09-02 14:50:25.126 11992 11992 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda13@d4dae4d
+09-02 14:50:25.160 11992 12173 W GeckoEventDispatcher: No listener for GeckoView:WebExtension:OnInstalling
+09-02 14:50:25.199 11992 12173 W GeckoEventDispatcher: No listener for GeckoView:WebExtension:OnInstalled
+09-02 14:50:25.288 11992 12173 W GeckoEventDispatcher: No listener for GeckoView:WebExtension:OnOptionalPermissionsChanged
+09-02 14:50:25.402 11992 12173 W GeckoEventDispatcher: No listener for GeckoView:BrowserAction:Update
+09-02 14:50:25.624 11992 12173 W GeckoEventDispatcher: No listener for GeckoView:WebExtension:OnReady
+09-02 14:50:25.790 11992 11992 W GeckoNetworkManager: Invalid event enableNotifications for state OffWithListeners
+09-02 14:50:25.831 11992 11992 W com.steamaccountmanager.app.debug:gecko_prototype: type=1400 audit(0.0:533): avc:  denied  { nlmsg_readpriv } for  comm=536F636B657420546872656164 scontext=u:r:untrusted_app:s0:c221,c256,c512,c768 tcontext=u:r:untrusted_app:s0:c221,c256,c512,c768 tclass=netlink_route_socket permissive=0 bug=b/155595000 app=com.steamaccountmanager.app.debug
+09-02 14:50:26.099 11992 12173 W GeckoEventDispatcher: No listener for GeckoView:BrowserAction:Update
