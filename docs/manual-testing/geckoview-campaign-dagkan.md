@@ -16,10 +16,10 @@ the final compatibility check before any production browser migration may begin.
 
 ## Before you start
 
-- Test exact source commit `9095a4ddf886973b0c517833d83f1783ab191d9b`.
-- Use `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7\app-debug-FE7BFCBC.apk`.
-- The APK is 598,877,061 bytes. Its SHA-256 must be
-  `FE7BFCBCD851D8AE74A1201A3F0E443E2836E159D56C2E632EC761712E22ADE1`.
+- Test exact source commit `9db111a5d9b0952a903da303eea3d17f00aa811a`.
+- Use `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle4\app-debug-72B61808.apk`.
+- The APK is 598,777,460 bytes. Its SHA-256 must be
+  `72B618089423162DA6CD6405E536C5AB572D1781491D817452097B4BE001C58D`.
 - Run the complete procedure once on the dedicated emulator and once on a supported
   physical Android device running Android 9/API 28 or newer. Record the exact device
   model, Android version, API level, and CPU ABI. Do not use a personal emulator or
@@ -39,7 +39,7 @@ the final compatibility check before any production browser migration may begin.
 
 ## Steps
 
-Perform steps 1–32 on the emulator, then repeat steps 1–32 on the physical device.
+Perform steps 1–33 on the emulator, then repeat steps 1–33 on the physical device.
 Use the same target throughout one run.
 
 1. Verify the APK checksum with PowerShell `Get-FileHash -Algorithm SHA256 <path>`.
@@ -62,152 +62,156 @@ Use the same target throughout one run.
 
 5. Open synthetic slot A.
 
-   Expected: The worker opens a public Steam market listing in GeckoView, shows slot
-   A fixed `GV-*` markers, and lists the pinned GeckoView and CSFloat metadata.
+   Expected: The worker opens, shows slot A fixed `GV-*` markers, and lists the pinned
+   GeckoView and CSFloat metadata.
 
-6. Select **Review and install CSFloat**, then choose **Deny** on the consent prompt.
+6. Select **Open public Steam listing**.
+
+   Expected: The public Steam market listing opens in GeckoView before authentication.
+
+7. Select **Review and install CSFloat**, then choose **Deny** on the consent prompt.
 
    Expected: The prompt names CSFloat, the exact ID/version, and all required access
    including Steam API host access; denial leaves `GV-CSFLOAT-STATE-ABSENT slot=A`
    with a safe explanation and an enabled retry. This covers GV-05 and GV-06.
 
-7. Select **Reinstall CSFloat with consent**, review the prompt again, and choose
+8. Select **Reinstall CSFloat with consent**, review the prompt again, and choose
    **Accept**.
 
    Expected: GeckoView reports the exact official signed ID/version as enabled for
    slot A without claiming a separate optional-runtime permission. This covers GV-02
    and GV-07.
 
-8. Sign in to Steam account A only inside the visible Steam page.
+9. Sign in to Steam account A only inside the visible Steam page.
 
    Expected: Steam completes its normal interactive authentication, including Steam
    Guard if required. The prototype never asks for, echoes, or logs the credentials.
    This is GV-03.
 
-9. Navigate to the harmless public listing or an appropriate test-account inventory
+10. Navigate to the harmless public listing or an appropriate test-account inventory
    page where CSFloat normally appears.
 
    Expected: The page remains inside GeckoView and shows recognizable CSFloat-added
    content such as float/wear information. This is GV-04.
 
-10. Select **Open official CSFloat action**.
+11. Select **Open official CSFloat action**.
 
     Expected: The real CSFloat popup opens, rather than an app-made imitation.
 
-11. Use the official popup's normal control to enable offer tracking without creating
+12. Use the official popup's normal control to enable offer tracking without creating
     or accepting a trade.
 
     Expected: The popup visibly reports tracking enabled for test account A.
 
-12. Close the popup and select **Record visible official status**.
+13. Close the popup and select **Record visible official status**.
 
     Expected: The prototype records a visible active status only after the official
     popup was shown. This is GV-08.
 
-13. Return to the router and open synthetic slot B.
+14. Return to the router and open synthetic slot B.
 
     Expected: The prior worker closes before B opens; B is signed out of account A,
     B's synthetic markers differ, and CSFloat is absent. No A identity or page state
     appears.
 
-14. Install CSFloat in slot B by reviewing and accepting its independent prompt.
+15. Install CSFloat in slot B by reviewing and accepting its independent prompt.
 
     Expected: CSFloat becomes enabled only in B; B required its own informed consent.
 
-15. Sign in to Steam account B only inside the visible Steam page.
+16. Sign in to Steam account B only inside the visible Steam page.
 
     Expected: B authenticates normally and no account A identity appears.
 
-16. Open an appropriate page and enable tracking from the official CSFloat popup for
+17. Open an appropriate page and enable tracking from the official CSFloat popup for
     account B.
 
     Expected: CSFloat injection and the official enabled tracking status are visible
     for B without revealing A. This completes the live portion of GV-11.
 
-17. Switch A → B → A → B → A with the router controls.
+18. Switch A → B → A → B → A with the router controls.
 
     Expected: Each slot restores only its own Steam authentication, visible identity,
     page/storage marker, CSFloat install state, extension storage, and tracking state.
     No process-timeout message or cross-account flash appears. This covers GV-11 and
     GV-12.
 
-18. In slot A, select **Disable CSFloat**.
+19. In slot A, select **Disable CSFloat**.
 
     Expected: A changes to `GV-CSFLOAT-STATE-DISABLED slot=A`; injection and tracking
     stop for A.
 
-19. Open slot B.
+20. Open slot B.
 
     Expected: B remains signed into B with CSFloat and tracking enabled. A's revoke
     did not change B. This is part of GV-13.
 
-20. Return to A, select **Enable CSFloat**, then confirm the relevant page and popup.
+21. Return to A, select **Enable CSFloat**, then confirm the relevant page and popup.
 
     Expected: Only A returns to enabled/injected/tracking-capable state; B remains
     unchanged. This is part of GV-14.
 
-21. In A, select **Uninstall CSFloat**.
+22. In A, select **Uninstall CSFloat**.
 
     Expected: A changes to `GV-CSFLOAT-STATE-ABSENT slot=A`; injection and tracking
     are absent for A.
 
-22. Open B once more.
+23. Open B once more.
 
     Expected: B is still independently authenticated with CSFloat enabled and its
     prior tracking state intact. This completes GV-13.
 
-23. Return to A, select **Reinstall CSFloat with consent**, choose **Deny**, then use
+24. Return to A, select **Reinstall CSFloat with consent**, choose **Deny**, then use
     the same control again and choose **Accept**.
 
     Expected: Denial leaves A absent, the retry repeats the full consent, acceptance
     restores only A, and B stays unchanged. This completes GV-14.
 
-24. While A is open, rotate the device or otherwise trigger Android activity
+25. While A is open, rotate the device or otherwise trigger Android activity
     recreation without clearing app data.
 
     Expected: A restores the correct authentication, CSFloat state, tracking state,
     page marker, and extension marker without a duplicate install prompt.
 
-25. Select **Close worker screen**, then select **Reopen selected slot** in the router.
+26. Select **Close worker screen**, then select **Reopen selected slot** in the router.
 
     Expected: A restores the same state after screen close/reopen. This is GV-09.
 
-26. Select **Stop worker process** in the router, wait for `GV-WORKER-STOPPED`, then
+27. Select **Stop worker process** in the router, wait for `GV-WORKER-STOPPED`, then
     select **Reopen selected slot**.
 
     Expected: Stop completes without a timeout, and A restores the correct isolated
     profile after a new worker starts.
 
-27. Fully stop the debug app from Android Settings, then launch **Gecko profile
+28. Fully stop the debug app from Android Settings, then launch **Gecko profile
     isolation prototype** and select **Reopen selected slot**.
 
     Expected: A is still selected and restores its authentication, CSFloat install,
     injection, and tracking/alarm state without showing B. This is GV-10.
 
-28. Repeat the activity recreation, screen close/reopen, worker stop/reopen, and full
+29. Repeat the activity recreation, screen close/reopen, worker stop/reopen, and full
     app restart with B selected.
 
     Expected: Every transition restores B only, no A identity appears, and any failure
     is recoverable. This completes the lifecycle matrix.
 
-29. Follow an allowed Steam authentication redirect or link within the configured
+30. Follow an allowed Steam authentication redirect or link within the configured
     Steam site.
 
     Expected: Allowed Steam pages and authentication redirects load in-app.
 
-30. Follow a clearly unrelated destination from the Steam page.
+31. Follow a clearly unrelated destination from the Steam page.
 
     Expected: The unrelated destination does not load in the embedded browser; the
     app offers to open it externally. If it opens in-app or no external choice exists,
     mark GV-15 `FAIL`. Do not excuse this result because navigation parity is planned
     for issue #9.
 
-31. Exercise normal back, forward, and reload behavior on the allowed pages.
+32. Exercise normal back, forward, and reload behavior on the allowed pages.
 
     Expected: Each control behaves predictably and never crosses from A to B. Missing
     required controls or broken history means GV-15 `FAIL`.
 
-32. Exercise the labeled popup failure and recovery controls, then observe one real
+33. Exercise the labeled popup failure and recovery controls, then observe one real
     recoverable network/load failure if it occurs naturally.
 
     Expected: Failures show actionable, non-sensitive diagnostics, never falsely show

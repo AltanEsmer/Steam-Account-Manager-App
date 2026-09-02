@@ -10,8 +10,8 @@ issue #7 `GO` decision.
 
 | Field | Value |
 | --- | --- |
-| App source commit and build variant | `9095a4ddf886973b0c517833d83f1783ab191d9b`, `debug` |
-| APK | `app/build/outputs/apk/debug/app-debug.apk`, 598,877,061 bytes, SHA-256 `FE7BFCBCD851D8AE74A1201A3F0E443E2836E159D56C2E632EC761712E22ADE1`; preserved on the campaign host at `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7\app-debug-FE7BFCBC.apk` |
+| App source commit and build variant | `9db111a5d9b0952a903da303eea3d17f00aa811a`, `debug` |
+| APK | `app/build/outputs/apk/debug/app-debug.apk`, 598,777,460 bytes, SHA-256 `72B618089423162DA6CD6405E536C5AB572D1781491D817452097B4BE001C58D`; preserved on the campaign host at `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle4\app-debug-72B61808.apk` |
 | Upstream baseline APK | Commit `8de0e23443250326afbf087346b8c6a7eef302b7`, `debug`, 63,099,195 bytes, SHA-256 `352A9BDA1FDFA2E11942F7BC9C794FB00C1F27762A9C591274230CE6BBED8FD2` |
 | GeckoView | `153.0.20260810162159`, stable Maven artifact |
 | CSFloat | Official signed Firefox artifact, ID `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}`, version `5.17.0`, GeckoView signed state `2` |
@@ -19,7 +19,7 @@ issue #7 `GO` decision.
 | Host | Windows 11 Pro 64-bit, version `10.0.26200`, build `26200`; Android Studio 2025.2.1 build `AI-252.25557.131.2521.14432022` |
 | Android target | Dedicated AVD `Codex_GeckoView_Campaign_API_36`, serial `emulator-5580`, Android 16/API 36, `x86_64`, Google Play image |
 | Emulator tooling | Android Emulator `36.2.12.0` build `14214601`; adb `36.0.0-13206524` |
-| Final report timestamps | Unit tests 2026-09-02 17:03:44 UTC; lint 17:04:06 UTC; APK 17:11:14 UTC; instrumentation 17:15:41 UTC |
+| Final report timestamps | Unit tests 2026-09-02 18:40:48 UTC; APK 18:40:56 UTC; instrumentation 18:42:11 UTC; lint 18:42:12 UTC; emulator matrix completed 19:02:14 UTC |
 | Gate result | Issue #6 machine scenarios pass. Authenticated Steam state, live CSFloat tracking, physical-device behavior, navigation policy, and the issue #7 decision remain `NOT RUN`. |
 
 ## Selected isolation topology
@@ -33,9 +33,15 @@ identifier owns a persistent directory below the app's no-backup storage at
 Only one reusable `:gecko_prototype` worker and one Gecko runtime are resident at
 a time. The worker starts with Gecko's `--profile <absolute profile path>` argument.
 Changing the selected pair stops the prior worker, waits a bounded eight seconds for
-the worker and recognized Gecko children to exit, then starts the new profile. It
+the worker and all app-owned colon subprocesses to exit, then starts the new profile. It
 fails closed if shutdown cannot be proven. This avoids keeping every possible
 browser session resident while preserving each profile on disk.
+
+Profiles remain below `noBackupFilesDir/gecko-prototype-profiles` while their browser
+session exists. Cleanup may delete only the owning profile after that account/website
+session is explicitly removed or revoked, after its worker has stopped, and after
+contained-path validation. It must never bulk-clear other profiles. This prototype
+demonstrates persistence but does not yet expose session-removal or cleanup UI.
 
 Gecko `contextId` was rejected for this contract because extension installation,
 storage, and enablement are runtime-wide. It cannot by itself isolate CSFloat state.
@@ -56,34 +62,39 @@ Gradle instrumentation to the dedicated AVD, and every direct adb command used
 $env:ANDROID_HOME='C:\Users\esmer\AppData\Local\Android\Sdk'
 $env:ANDROID_SERIAL='emulator-5580'
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug lintDebug connectedDebugAndroidTest --rerun-tasks
-# exit 0: BUILD SUCCESSFUL; 34 unit tests, 10 instrumentation tests,
+# exit 0: BUILD SUCCESSFUL in 1m43s; 35 unit tests, 10 instrumentation tests,
 # debug assembly, and lint all passed
 
-# The complete instrumentation suite was then run twice consecutively by the
-# implementation worker and once independently by the orchestrator.
-.\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' connectedDebugAndroidTest --rerun-tasks
-# exit 0 each time: 10/10 tests passed in 1m06s, 1m04s, and 1m06s
-
 $adb='C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
-& $adb -s emulator-5580 install -r .\app\build\outputs\apk\debug\app-debug.apk
-& $adb -s emulator-5580 shell pm clear com.steamaccountmanager.app.debug
-& $adb -s emulator-5580 shell am start -W -n com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoViewPrototypeActivity
-# all exit 0: exact APK installed, only the debug package was cleared, and the
-# prototype cold-launched
+& $adb -s emulator-5580 install -r C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle4\app-debug-72B61808.apk
+& $adb -s emulator-5580 shell am start -W -n com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoPrototypeRouterActivity
+# exit 0: the exact APK installed and the exported router cold-launched. Select
+# Open synthetic slot A; the non-exported worker can be launched only with a slot.
 
 & $adb -s emulator-5580 shell am force-stop com.steamaccountmanager.app.debug
-& $adb -s emulator-5580 shell am start -W -n com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoViewPrototypeActivity
-# both exit 0: a full package restart restored the selected A profile
+& $adb -s emulator-5580 shell am start -W -n com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoPrototypeRouterActivity
+# both exit 0: select Reopen selected slot in the router. The cycle-4 restart
+# evidence records the selected A profile and its disabled CSFloat state restored.
 
-& $adb -s emulator-5580 shell pidof com.steamaccountmanager.app.debug
-& $adb -s emulator-5580 shell pidof com.steamaccountmanager.app.debug:gecko_prototype
-# after the explicit prototype stop, only the router process was present;
-# reopening created one worker plus Gecko child processes
+& $adb -s emulator-5580 shell ps -A
+# after Stop worker process reported GV-WORKER-STOPPED, filtering the output to
+# com.steamaccountmanager.app.debug returned only the router process
+
+& $adb -s emulator-5580 logcat -d -t 200 'AndroidRuntime:E' 'GeckoRuntime:E' 'GeckoSession:E' 'GeckoView:E' '*:S'
+# exit 0 with no matching error records
 ```
+
+Every direct adb command in the cycle-4 run used `-s emulator-5580` and returned
+exit code 0. UI actions were driven with `adb shell input`; each result was checked
+with a fresh `uiautomator dump` and a sanitized screenshot. The current-source run
+observed A and B independently absent, independently consented and enabled, A
+disabled while B remained enabled, A re-enabled and uninstalled while B remained
+enabled, A denial remaining absent, accepted retry restoring A, complete worker
+shutdown, worker reopen, and full package restart through the exported router.
 
 Generated reports:
 
-- Unit tests: `app/build/reports/tests/testDebugUnitTest/index.html` — 34 tests,
+- Unit tests: `app/build/reports/tests/testDebugUnitTest/index.html` — 35 tests,
   zero failures, errors, or skips.
 - Instrumentation: `app/build/reports/androidTests/connected/debug/index.html` —
   10 tests, zero failures, errors, or skips.
@@ -101,7 +112,7 @@ Generated reports:
 | Official CSFloat installed/enabled state | PASS | A and B independently began absent, independently displayed the exact install consent, and independently enabled the same signed ID/version. Disabling or uninstalling A did not change B. Explicit enable restored only A. Reinstalling A repeated consent; denial left A absent and a later accepted retry restored only A. |
 | Repeated switching | PASS | Instrumentation and the manual emulator matrix switch repeatedly without cross-profile marker exposure. The runtime/process design keeps one active profile resident rather than all stored profiles. |
 | Activity and screen lifecycle | PASS | Activity recreation and browser screen close/reopen restored A's engine-observed page and extension markers without a duplicate install prompt. |
-| Worker process recreation | PASS | Explicit stop reported `GV-WORKER-STOPPED` only after the worker and recognized Gecko children were absent. Reopening restored A from the same persistent profile. |
+| Worker process recreation | PASS | Explicit stop reported `GV-WORKER-STOPPED` only after the worker and all app-owned colon subprocesses were absent. Reopening restored A from the same persistent profile. |
 | Full app restart | PASS | Force-stop left no package process. A cold router launch retained the selected pair, and reopening the worker restored A's engine and CSFloat state. |
 | Failure and recovery | PASS | Worker shutdown has an eight-second bound and fails closed. Marker native-message reconnection is bounded to 30 attempts at two-second intervals. Install denial remains absent and retry is explicit. |
 | Release exclusion | PASS | Release merged assets contain no issue #6 marker extension, and the release merged manifest contains no prototype marker or prototype process entry. Release packaging remains unverified because the local release signing store is unavailable. |
@@ -120,7 +131,7 @@ Generated reports:
 | Reinstall A | Consent denial leaves A absent; accepted retry restores A | B remains enabled | PASS |
 | Activity recreation | A markers and CSFloat enabled restore | Not resident | PASS |
 | Screen close/reopen | A markers and CSFloat enabled restore | Not resident | PASS |
-| Worker stop/reopen | No worker/recognized child, then A restores | Not resident | PASS |
+| Worker stop/reopen | No worker/app-owned child, then A restores | Not resident | PASS |
 | Full package restart | A selection, markers, and CSFloat state restore | Not resident | PASS |
 
 ## Representative process and size observations
@@ -130,19 +141,19 @@ performance claims. Stored profiles did not cause the process count to grow.
 
 | State | Processes | Total proportional set size |
 | --- | ---: | ---: |
-| A active after restart and more than six cross-profile switches | 7 | 559,628 KiB |
-| B active after the isolation matrix | 7 | 618,323 KiB |
-| Router only after a proven worker stop | 1 | 126,366 KiB |
-| A active after worker recreation | 7 | 633,374 KiB |
+| A active after the current-head isolation matrix | 7 | 605,658 KiB |
+| Router only after a current-head proven worker stop | 1 | 73,873 KiB |
 
-The issue #6 debug APK is 535,777,866 bytes larger than the upstream-main debug
+The issue #6 debug APK is 535,678,265 bytes larger than the upstream-main debug
 baseline. This is a fat debug artifact containing GeckoView native binaries; it is
 not a release-download or installed-size claim.
 
 ## Reviewable evidence and privacy
 
-Every PNG is an original 1080×2400 emulator capture. The captures and retained UI
-hierarchy XML were visually inspected before commit. They contain only the debug
+Every PNG is an original 1080×2400 emulator capture. The first seven captures below
+record the pre-cycle-4 baseline at `9095a4d`; the `gv6-cycle4-*` captures record the
+current source commit `9db111a`. All captures and retained UI hierarchy XML were
+visually inspected before commit. They contain only the debug
 prototype, public fixture text, fixed `GV-*` status labels, and the official CSFloat
 consent surface. They contain no credentials, Steam Guard codes, QR login material,
 cookies, tokens, account identifiers, inventory, trade details, payment information,
@@ -162,6 +173,20 @@ or authentication UI.
   SHA-256 `AA4CC68FA00B2594399773CDC94A557107B662CB666897F1F6357DFCBC0A0D5D`
 - [A synthetic engine and extension markers](evidence/issue-6/gv6-a-synthetic-markers.png):
   SHA-256 `177498974B00356AEF676C7A7F7D890B4F8D2FF755637F25A99FCA422D43B9BD`
+- [Cycle 4 A enabled after repeated consent](evidence/issue-6/gv6-cycle4-a-final-enabled.png):
+  SHA-256 `72E65430D4DF12C38BEBAC7DCBDCED986C18AEBC8B18FD30BABE306499D69B1A`
+- [Cycle 4 B remains enabled after A is disabled](evidence/issue-6/gv6-cycle4-b-after-a-disable.png):
+  SHA-256 `536CAAA59F8408E0D1FE778122DF4B63CA231608C62A862A25BA8C951DA172C0`
+- [Cycle 4 revoked CSFloat state](evidence/issue-6/gv6-cycle4-revoked-state.png):
+  SHA-256 `7DD07A883EB0280FBD234994B5A92AD2A9E6B1AD1CD3D6D32D12B5EBEE20C35A`
+- [Cycle 4 revoked action is unavailable](evidence/issue-6/gv6-cycle4-revoked-action.png):
+  SHA-256 `8F6073FCF680EF82C3DCBA057A3D875E604E9ACE9FF79179434F1564FB2451EF`
+- [Cycle 4 complete worker stop](evidence/issue-6/gv6-cycle4-worker-stopped.png):
+  SHA-256 `C23BA1D3BB158D4207A682FFCC4526748F800AD8757EF95654295115D0702703`
+- [Cycle 4 full restart restoration](evidence/issue-6/gv6-cycle4-full-restart-restored.png):
+  SHA-256 `4976335A87DED855AA45A831BEDD5649137BD183FAC40298574E2124C7086429`
+- [Cycle 4 repeated install consent](evidence/issue-6/gv6-cycle4-consent.png):
+  SHA-256 `4DE383BCBADC3020A5E554C0F7913A6B9C5415993BCD0BA6745160A2B0B5091C`
 
 The XML evidence in `evidence/issue-6/` records fixed UI labels for A/B extension
 state, disable/uninstall isolation, lifecycle restoration, worker shutdown, and the
@@ -176,18 +201,21 @@ for `manifest.json`.
 
 ## Repair history
 
-The bounded issue repair budget was fully used:
+The original three-cycle repair budget was exhausted:
 
 1. Explicit stop initially left a Gecko crash helper. Shutdown now waits for the
-   worker and recognized Gecko children before acknowledging completion.
+   worker and every app-owned colon subprocess before acknowledging completion.
 2. Hosting the fixture in the persistent router process allowed Android to freeze the
    server while the worker was active. The loopback fixture moved into the worker.
 3. Full-suite contention exposed a too-short native marker reconnection window. The
    bounded window increased to 30 two-second attempts and marker version `1.4`.
 
 After the third repair, two consecutive writer runs and one orchestrator run passed
-the complete 10-test instrumentation suite. No further source repair is available
-for issue #6 without declaring the issue budget exhausted.
+the complete 10-test instrumentation suite. The user then explicitly authorized
+exceptional repair cycle 4, which corrected fail-closed CSFloat action/tracking state
+after disable, uninstall, or a non-enabled refresh and expanded the process barrier
+to cover every app-owned Gecko child process while preserving graceful worker
+shutdown. No further issue #6 repair cycle is authorized.
 
 ## Known limitations and non-claims
 
