@@ -9,6 +9,7 @@ import android.os.Process
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import org.mozilla.geckoview.GeckoResult
@@ -34,6 +35,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private lateinit var markerStatus: TextView
     private lateinit var engineStatus: TextView
     private lateinit var extensionState: TextView
+    private lateinit var markerExtensionState: TextView
     private lateinit var slot: String
     private lateinit var profileId: String
     private var installDenied = false
@@ -49,6 +51,8 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private var pendingPopupRequestId: Long? = null
     private var markerExtension: WebExtension? = null
     private var markerPort: WebExtension.Port? = null
+    private var markerMutationInFlight = false
+    private var csfloatMutationInFlight = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,14 +114,17 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             text = "GV-CSFLOAT-STATE-UNKNOWN"
             setPadding(24, 8, 24, 8)
         }
+        markerExtensionState = TextView(this).apply {
+            text = "GV-MARKER-STATE-UNKNOWN slot=$slot profile=$profileId"
+            setPadding(24, 8, 24, 8)
+        }
         val metadata = TextView(this).apply {
             text = ARTIFACT_METADATA
             setPadding(24, 8, 24, 12)
             setTextIsSelectable(true)
         }
         val geckoView = GeckoView(this)
-        setContentView(
-            LinearLayout(this).apply {
+        val controls = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(status)
                 addView(markerStatus)
@@ -137,7 +144,18 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 addView(button("Enable CSFloat") { changeCsfloat("enable") })
                 addView(button("Uninstall CSFloat") { changeCsfloat("uninstall") })
                 addView(button("Reinstall CSFloat with consent") { installExtension() })
+                addView(markerExtensionState)
+                addView(button("Disable issue6 marker") { changeMarker("disable") })
+                addView(button("Enable issue6 marker") { changeMarker("enable") })
+                addView(button("Uninstall issue6 marker") { changeMarker("uninstall") })
+                addView(button("Reinstall issue6 marker (synthetic only)") { changeMarker("reinstall") })
                 addView(metadata)
+        }
+        setContentView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(ScrollView(this@GeckoViewPrototypeActivity).apply { addView(controls) },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
                 addView(
                     geckoView,
                     LinearLayout.LayoutParams(
@@ -189,7 +207,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         runtime.webExtensionController.setTabActive(session, true)
         renderTracking()
         discoverAction()
-        installMarkerExtension()
+        discoverMarkerExtension()
         refreshCsfloatState()
     }
 
@@ -233,9 +251,92 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 }
                 markerExtension = extension
                 extension.setMessageDelegate(markerMessageDelegate, MARKER_NATIVE_APP)
-                markerStatus.text = "GV-MARKER-DELEGATE-READY slot=$slot"
+                refreshMarkerState()
             } },
-            { runOnUiThread { markerStatus.text = "GV-MARKER-INSTALL-FAILED" } },
+            { runOnUiThread {
+                markerStatus.text = "GV-MARKER-INSTALL-FAILED"
+                markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
+            } },
+        )
+    }
+
+    private fun discoverMarkerExtension() {
+        runtime.webExtensionController.list().accept(
+            { extensions -> runOnUiThread {
+                val exact = extensions.orEmpty().singleOrNull { it.id == MARKER_EXTENSION_ID }
+                if (exact == null) {
+                    markerExtensionState.text = "GV-MARKER-STATE-ABSENT slot=$slot profile=$profileId"
+                } else {
+                    markerExtension = exact
+                    exact.setMessageDelegate(markerMessageDelegate, MARKER_NATIVE_APP)
+                    refreshMarkerState()
+                }
+            } },
+            { runOnUiThread {
+                markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
+            } },
+        )
+    }
+
+    private fun refreshMarkerState(after: (() -> Unit)? = null) {
+        runtime.webExtensionController.list().accept(
+            { extensions -> runOnUiThread {
+                val exact = extensions.orEmpty().singleOrNull { it.id == MARKER_EXTENSION_ID }
+                if (exact == null) {
+                    markerPort?.disconnect()
+                    markerPort = null
+                    markerExtension?.setMessageDelegate(null, MARKER_NATIVE_APP)
+                    markerExtension = null
+                }
+                markerExtensionState.text = when {
+                    exact == null -> "GV-MARKER-STATE-ABSENT slot=$slot profile=$profileId"
+                    exact.metaData.enabled -> "GV-MARKER-STATE-ENABLED slot=$slot profile=$profileId"
+                    else -> "GV-MARKER-STATE-DISABLED slot=$slot profile=$profileId"
+                }
+                markerMutationInFlight = false
+                after?.invoke()
+            } },
+            { runOnUiThread {
+                markerMutationInFlight = false
+                markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
+            } },
+        )
+    }
+
+    private fun changeMarker(operation: String) {
+        if (markerMutationInFlight) return
+        markerMutationInFlight = true
+        if (operation == "reinstall") {
+            installMarkerExtension()
+            return
+        }
+        runtime.webExtensionController.list().accept(
+            { extensions -> runOnUiThread {
+                val exact = extensions.orEmpty().singleOrNull { it.id == MARKER_EXTENSION_ID }
+                if (exact == null) {
+                    refreshMarkerState()
+                    return@runOnUiThread
+                }
+                val success = { _: Any? -> refreshMarkerState {
+                    if (operation == "enable") installMarkerExtension()
+                } }
+                val failed = { _: Throwable? -> runOnUiThread {
+                    markerMutationInFlight = false
+                    markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
+                } }
+                when (operation) {
+                    "disable" -> runtime.webExtensionController
+                        .disable(exact, WebExtensionController.EnableSource.APP).accept(success, failed)
+                    "enable" -> runtime.webExtensionController
+                        .enable(exact, WebExtensionController.EnableSource.APP).accept(success, failed)
+                    "uninstall" -> runtime.webExtensionController.uninstall(exact).accept(success, failed)
+                    else -> markerMutationInFlight = false
+                }
+            } },
+            { runOnUiThread {
+                markerMutationInFlight = false
+                markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
+            } },
         )
     }
 
@@ -289,24 +390,34 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun changeCsfloat(operation: String) {
+        if (csfloatMutationInFlight || operation !in setOf("disable", "enable", "uninstall")) return
+        csfloatMutationInFlight = true
         runtime.webExtensionController.list().accept(
             { extensions -> runOnUiThread {
                 val exact = extensions.orEmpty().singleOrNull { isExpectedCsfloat(it.id, it.metaData.version) }
                 if (exact == null) {
                     extensionState.text = "GV-CSFLOAT-STATE-ABSENT slot=$slot"
+                    csfloatMutationInFlight = false
                 } else {
                     val result = when (operation) {
                         "disable" -> runtime.webExtensionController.disable(exact, WebExtensionController.EnableSource.APP)
                         "enable" -> runtime.webExtensionController.enable(exact, WebExtensionController.EnableSource.APP)
-                        else -> runtime.webExtensionController.uninstall(exact).map { exact }
+                        "uninstall" -> runtime.webExtensionController.uninstall(exact).map { exact }
+                        else -> error("unreachable")
                     }
                     result.accept(
-                        { refreshCsfloatState() },
-                        { runOnUiThread { extensionState.text = "GV-CSFLOAT-STATE-FAILED" } },
+                        { refreshCsfloatState { csfloatMutationInFlight = false } },
+                        { runOnUiThread {
+                            csfloatMutationInFlight = false
+                            extensionState.text = "GV-CSFLOAT-STATE-FAILED"
+                        } },
                     )
                 }
             } },
-            { runOnUiThread { extensionState.text = "GV-CSFLOAT-STATE-FAILED" } },
+            { runOnUiThread {
+                csfloatMutationInFlight = false
+                extensionState.text = "GV-CSFLOAT-STATE-FAILED"
+            } },
         )
     }
 
