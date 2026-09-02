@@ -48,6 +48,16 @@ $adb="$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
 & $adb -s emulator-5580 shell am start -W -n 'com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoViewPrototypeActivity'
 # exit 0: Status ok; LaunchState COLD
 
+& $adb -s emulator-5580 shell cmd connectivity airplane-mode enable
+& $adb -s emulator-5580 shell input tap 540 146
+& $adb -s emulator-5580 shell cmd connectivity airplane-mode disable
+# all exit 0: induced and safely recovered from an offline install failure; retry stayed enabled
+
+& $adb -s emulator-5580 shell am force-stop com.steamaccountmanager.app.debug
+& $adb -s emulator-5580 shell pm clear com.steamaccountmanager.app.debug
+& $adb -s emulator-5580 shell am start -W -n 'com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoViewPrototypeActivity'
+# all exit 0: reset only the debug package, then cold-launched a fresh online run
+
 & $adb -s emulator-5580 shell input tap 540 146
 # exit 0: requested the supported GeckoView extension-install flow
 
@@ -57,11 +67,6 @@ $adb="$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
 & $adb -s emulator-5580 shell input tap 540 180
 & $adb -s emulator-5580 shell input tap 875 1850
 # both exit 0: retried and explicitly accepted the second GeckoView install prompt
-
-& $adb -s emulator-5580 shell cmd connectivity airplane-mode enable
-& $adb -s emulator-5580 shell input tap 540 146
-& $adb -s emulator-5580 shell cmd connectivity airplane-mode disable
-# all exit 0: induced and safely recovered from an offline install failure; retry stayed enabled
 
 & $adb -s emulator-5580 shell am force-stop com.steamaccountmanager.app.debug
 & $adb -s emulator-5580 shell am start -W -n 'com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoViewPrototypeActivity'
