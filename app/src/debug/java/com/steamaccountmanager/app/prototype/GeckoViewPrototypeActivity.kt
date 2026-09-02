@@ -20,7 +20,13 @@ import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
 import org.json.JSONObject
+import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.Executors
 
 class GeckoViewPrototypeActivity : ComponentActivity() {
     private lateinit var runtime: GeckoRuntime
@@ -166,6 +172,12 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 )
             },
         )
+
+        if (!PrototypeLoopbackServer.start()) {
+            status.text = "GV-LOOPBACK-START-FAILED: Synthetic fixture unavailable."
+            finish()
+            return
+        }
 
         val root = File(noBackupFilesDir, "gecko-prototype-profiles").toPath()
         val profile = requireContainedProfilePath(root, root.resolve(profileId)).toFile().apply { mkdirs() }
@@ -775,4 +787,56 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 "SHA-256: 70C540B8B1DF125596EF615FE37028542DE4D92B3816AD81EB6AD5CE3D11798D\n" +
                 "Signature is validated by GeckoView during install; observed signed state appears after success."
     }
+}
+
+private object PrototypeLoopbackServer {
+    @Volatile private var server: ServerSocket? = null
+
+    @Synchronized fun start(): Boolean {
+        if (server != null) return true
+        val bound = try {
+            ServerSocket(LOOPBACK_PORT, 8, InetAddress.getByName("127.0.0.1"))
+        } catch (_: Exception) {
+            return false
+        }
+        server = bound
+        Executors.newSingleThreadExecutor().execute {
+            bound.use {
+                while (!it.isClosed) try {
+                    it.accept().use { socket ->
+                        socket.soTimeout = 2_000
+                        val request = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII))
+                            .readLine().orEmpty()
+                        val requestedSlot = Regex("^GET /slot/([AB]) HTTP/1\\.[01]$")
+                            .matchEntire(request)?.groupValues?.get(1)
+                        val body = if (requestedSlot == null) {
+                            "<!doctype html><title>GV6|error=request</title>"
+                        } else {
+                            page(requestedSlot)
+                        }
+                        val status = if (requestedSlot == null) "400 Bad Request" else "200 OK"
+                        val bytes = body.toByteArray(StandardCharsets.UTF_8)
+                        socket.getOutputStream().write(
+                            "HTTP/1.1 $status\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
+                                .toByteArray(StandardCharsets.US_ASCII),
+                        )
+                        socket.getOutputStream().write(bytes)
+                    }
+                } catch (_: Exception) {
+                    // A bounded client failure must not terminate the fixed test server.
+                }
+            }
+            synchronized(this) {
+                if (server === bound) server = null
+            }
+        }
+        return true
+    }
+
+    private fun page(slot: String) = """<!doctype html><meta charset=utf-8><body><h1>Issue 6 synthetic slot $slot</h1><pre id=o>GV6|loading</pre><script>
+const s='$slot'; if(!document.cookie.includes('gv6='))document.cookie='gv6='+s+'; SameSite=Strict';
+if(!localStorage.gv6)localStorage.gv6=s;if(!localStorage.gv6nav)localStorage.gv6nav=s;
+const n=localStorage.gv6nav;if(!history.state)history.replaceState({gv6:n},'',location.pathname+'#'+n);
+const q=indexedDB.open('gv6',1);q.onupgradeneeded=()=>q.result.createObjectStore('m');q.onsuccess=()=>{const d=q.result.transaction('m','readwrite').objectStore('m');const g=d.get('slot');g.onsuccess=()=>{const prior=g.result||s;if(!g.result)d.put(s,'slot');const c=(document.cookie.match(/gv6=([AB])/)||[])[1]||'missing';const l=localStorage.gv6||'missing';const text=`GV6|slot=${'$'}{s}|cookie=${'$'}{c}|local=${'$'}{l}|idb=${'$'}{prior}|nav=${'$'}{n}`;document.title=text;document.getElementById('o').textContent=text;};};
+</script></body>"""
 }

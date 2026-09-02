@@ -12,12 +12,6 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.InetAddress
-import java.net.ServerSocket
-import java.nio.charset.StandardCharsets
-import java.util.concurrent.Executors
 
 internal const val EXTRA_SLOT = "prototype_slot"
 internal const val ACTION_SHUTDOWN = "com.steamaccountmanager.app.debug.PROTOTYPE_SHUTDOWN"
@@ -41,7 +35,6 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        PrototypeLoopbackServer.start()
         selectedSlot = getPreferences(MODE_PRIVATE).getString("slot", null)
         status = TextView(this).apply { setPadding(24, 24, 24, 24) }
         setContentView(LinearLayout(this).apply {
@@ -132,48 +125,6 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
     private fun render(code: String) {
         status.text = "$code\nselected=${selectedSlot ?: "none"}\nrouterPid=${android.os.Process.myPid()}"
     }
-}
-
-private object PrototypeLoopbackServer {
-    @Volatile private var started = false
-
-    @Synchronized fun start() {
-        if (started) return
-        started = true
-        Executors.newSingleThreadExecutor().execute {
-            try {
-                ServerSocket(LOOPBACK_PORT, 8, InetAddress.getByName("127.0.0.1")).use { server ->
-                    while (true) try {
-                        server.accept().use { socket ->
-                            socket.soTimeout = 2_000
-                            val request = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII))
-                                .readLine().orEmpty()
-                            val slot = Regex("^GET /slot/([AB]) HTTP/1\\.[01]$").matchEntire(request)?.groupValues?.get(1)
-                            val body = if (slot == null) "<!doctype html><title>GV6|error=request</title>" else page(slot)
-                            val status = if (slot == null) "400 Bad Request" else "200 OK"
-                            val bytes = body.toByteArray(StandardCharsets.UTF_8)
-                            socket.getOutputStream().write(
-                                "HTTP/1.1 $status\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
-                                    .toByteArray(StandardCharsets.US_ASCII),
-                            )
-                            socket.getOutputStream().write(bytes)
-                        }
-                    } catch (_: Exception) {
-                        // A bounded client failure must not terminate the fixed test server.
-                    }
-                }
-            } catch (_: Exception) {
-                started = false
-            }
-        }
-    }
-
-    private fun page(slot: String) = """<!doctype html><meta charset=utf-8><body><h1>Issue 6 synthetic slot $slot</h1><pre id=o>GV6|loading</pre><script>
-const s='$slot'; if(!document.cookie.includes('gv6='))document.cookie='gv6='+s+'; SameSite=Strict';
-if(!localStorage.gv6)localStorage.gv6=s;if(!localStorage.gv6nav)localStorage.gv6nav=s;
-const n=localStorage.gv6nav;if(!history.state)history.replaceState({gv6:n},'',location.pathname+'#'+n);
-const q=indexedDB.open('gv6',1);q.onupgradeneeded=()=>q.result.createObjectStore('m');q.onsuccess=()=>{const d=q.result.transaction('m','readwrite').objectStore('m');const g=d.get('slot');g.onsuccess=()=>{const prior=g.result||s;if(!g.result)d.put(s,'slot');const c=(document.cookie.match(/gv6=([AB])/)||[])[1]||'missing';const l=localStorage.gv6||'missing';const text=`GV6|slot=${'$'}{s}|cookie=${'$'}{c}|local=${'$'}{l}|idb=${'$'}{prior}|nav=${'$'}{n}`;document.title=text;document.getElementById('o').textContent=text;};};
-</script></body>"""
 }
 
 class PrototypeWorkerShutdownReceiver : BroadcastReceiver() {
