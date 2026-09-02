@@ -51,7 +51,12 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             addView(button("Open synthetic slot B") { select("B") })
             addView(button("Reopen selected slot") { selectedSlot?.let(::select) })
             addView(button("Recreate router activity") { recreate() })
-            addView(button("Stop worker process") { stopWorker(null) })
+            addView(button("Stop worker process") {
+                stopWorker(
+                    "GV-WORKER-STOP-WAIT",
+                    "GV-WORKER-STOP-TIMEOUT",
+                ) { stoppedGeneration -> render("GV-WORKER-STOPPED generation=$stoppedGeneration") }
+            })
         })
         render("GV-ROUTER-READY")
     }
@@ -67,17 +72,30 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             authorize(slot)
             return
         }
+        stopWorker(
+            "GV-PROFILE-SWITCH-WAIT",
+            "GV-PROFILE-SWITCH-TIMEOUT",
+        ) { authorize(slot) }
+    }
+
+    private fun stopWorker(
+        waitCode: String,
+        timeoutCode: String,
+        stopped: (Long) -> Unit,
+    ) {
         generation += 1
         val requestedGeneration = generation
-        render("GV-PROFILE-SWITCH-WAIT generation=$requestedGeneration")
-        stopWorker(requestedGeneration)
+        render("$waitCode generation=$requestedGeneration")
+        sendBroadcast(Intent(this, PrototypeWorkerShutdownReceiver::class.java).setAction(ACTION_SHUTDOWN).apply {
+            putExtra(EXTRA_GENERATION, requestedGeneration)
+        })
         val deadline = System.currentTimeMillis() + 8_000
         fun poll() {
             if (requestedGeneration != generation) return
             terminateRecognizedGeckoChildren()
-            if (!workerRunning()) authorize(slot)
+            if (!workerRunning()) stopped(requestedGeneration)
             else if (System.currentTimeMillis() >= deadline) {
-                render("GV-PROFILE-SWITCH-TIMEOUT generation=$requestedGeneration")
+                render("$timeoutCode generation=$requestedGeneration")
             } else handler.postDelayed(::poll, 200)
         }
         handler.postDelayed(::poll, 200)
@@ -91,12 +109,6 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             .apply()
         render("GV-PROFILE-AUTHORIZED slot=$slot profile=${slotProfileId(slot)}")
         startActivity(Intent(this, GeckoViewPrototypeActivity::class.java).putExtra(EXTRA_SLOT, slot))
-    }
-
-    private fun stopWorker(requestedGeneration: Long?) {
-        sendBroadcast(Intent(this, PrototypeWorkerShutdownReceiver::class.java).setAction(ACTION_SHUTDOWN).apply {
-            requestedGeneration?.let { putExtra(EXTRA_GENERATION, it) }
-        })
     }
 
     private fun workerRunning(): Boolean {

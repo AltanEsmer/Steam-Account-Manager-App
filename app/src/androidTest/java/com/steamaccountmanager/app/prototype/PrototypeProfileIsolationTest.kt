@@ -78,7 +78,7 @@ class PrototypeProfileIsolationTest {
 
         backToRouter()
         click("Stop worker process")
-        SystemClock.sleep(2_000)
+        awaitText("GV-WORKER-STOPPED", 30_000)
         click("Reopen selected slot")
         awaitText("GV-MARKER-STATE-ENABLED slot=A", 45_000)
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
