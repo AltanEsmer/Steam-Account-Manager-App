@@ -19,7 +19,6 @@ internal const val EXTRA_GENERATION = "prototype_generation"
 internal const val LOOPBACK_PORT = 38947
 internal const val MARKER_EXTENSION_ID = "issue6-marker@steam-account-manager.invalid"
 internal const val MARKER_NATIVE_APP = "issue6Marker"
-private val GECKO_CHILD_NAMES = setOf("tab", "gpu", "crashhelper", "socket", "rdd", "utility", "extension")
 
 internal fun slotProfileId(slot: String): String = when (slot) {
     "A" -> geckoProfileId("synthetic-account-a", "synthetic-website")
@@ -85,7 +84,7 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
         val deadline = System.currentTimeMillis() + 8_000
         fun poll() {
             if (requestedGeneration != generation) return
-            terminateRecognizedGeckoChildren()
+            terminateAppChildProcesses()
             if (!workerRunning()) stopped(requestedGeneration)
             else if (System.currentTimeMillis() >= deadline) {
                 render("$timeoutCode generation=$requestedGeneration")
@@ -107,18 +106,14 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
     private fun workerRunning(): Boolean {
         val prefix = "$packageName:"
         return (getSystemService(ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses.orEmpty()
-            .any { it.processName == "${packageName}:gecko_prototype" ||
-                (it.processName.startsWith(prefix) && GECKO_CHILD_NAMES.any { child ->
-                    it.processName.removePrefix(prefix).startsWith(child)
-                }) }
+            .any { it.processName.startsWith(prefix) }
     }
 
-    private fun terminateRecognizedGeckoChildren() {
+    private fun terminateAppChildProcesses() {
         val prefix = "$packageName:"
+        val worker = "${packageName}:gecko_prototype"
         (getSystemService(ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses.orEmpty()
-            .filter { process -> process.processName.startsWith(prefix) && GECKO_CHILD_NAMES.any { child ->
-                process.processName.removePrefix(prefix).startsWith(child)
-            } }
+            .filter { process -> process.processName.startsWith(prefix) && process.processName != worker }
             .forEach { Process.killProcess(it.pid) }
     }
 

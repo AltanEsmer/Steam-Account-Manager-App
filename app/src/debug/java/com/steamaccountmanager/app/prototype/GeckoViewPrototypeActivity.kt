@@ -386,18 +386,24 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         }
     }
 
-    private fun refreshCsfloatState(after: (() -> Unit)? = null) {
+    private fun refreshCsfloatState(after: ((Boolean) -> Unit)? = null) {
         runtime.webExtensionController.list().accept(
             { extensions -> runOnUiThread {
                 val exact = extensions.orEmpty().singleOrNull { isExpectedCsfloat(it.id, it.metaData.version) }
+                val enabled = exact?.metaData?.enabled == true
                 extensionState.text = when {
                     exact == null -> "GV-CSFLOAT-STATE-ABSENT slot=$slot"
-                    exact.metaData.enabled -> "GV-CSFLOAT-STATE-ENABLED slot=$slot"
+                    enabled -> "GV-CSFLOAT-STATE-ENABLED slot=$slot"
                     else -> "GV-CSFLOAT-STATE-DISABLED slot=$slot"
                 }
-                after?.invoke()
+                if (!enabled) revokeOfficialAction()
+                after?.invoke(enabled)
             } },
-            { runOnUiThread { extensionState.text = "GV-CSFLOAT-STATE-FAILED" } },
+            { runOnUiThread {
+                extensionState.text = "GV-CSFLOAT-STATE-FAILED"
+                revokeOfficialAction()
+                after?.invoke(false)
+            } },
         )
     }
 
@@ -409,6 +415,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 val exact = extensions.orEmpty().singleOrNull { isExpectedCsfloat(it.id, it.metaData.version) }
                 if (exact == null) {
                     extensionState.text = "GV-CSFLOAT-STATE-ABSENT slot=$slot"
+                    revokeOfficialAction()
                     csfloatMutationInFlight = false
                 } else {
                     val result = when (operation) {
@@ -418,7 +425,13 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                         else -> error("unreachable")
                     }
                     result.accept(
-                        { refreshCsfloatState { csfloatMutationInFlight = false } },
+                        { runOnUiThread {
+                            if (operation != "enable") revokeOfficialAction()
+                            refreshCsfloatState { enabled ->
+                                csfloatMutationInFlight = false
+                                if (operation == "enable" && enabled) discoverAction()
+                            }
+                        } },
                         { runOnUiThread {
                             csfloatMutationInFlight = false
                             extensionState.text = "GV-CSFLOAT-STATE-FAILED"
@@ -577,6 +590,13 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         defaultAction = null
         sessionAction = null
         effectiveAction = null
+    }
+
+    private fun revokeOfficialAction() {
+        closePopup()
+        clearActionDelegates()
+        tracking.unavailable()
+        renderTracking()
     }
 
     private val actionDelegate = object : WebExtension.ActionDelegate {
