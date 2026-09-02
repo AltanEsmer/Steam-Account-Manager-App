@@ -99,6 +99,24 @@ class PrototypeContractTest {
     }
 
     @Test
+    fun `extension revocation makes official action and tracking unavailable`() {
+        val tracking = PrototypeTracking().apply { actionAvailable() }
+        val openedRequest = requireNotNull(tracking.requestAction {})
+        tracking.popupOpened(openedRequest)
+        tracking.recordVisibleOfficialStatus()
+        assertEquals(TrackingState.ACTIVE, tracking.state)
+        assertTrue(tracking.officialSurfaceOpened)
+        assertEquals(2L, tracking.requestAction {})
+
+        tracking.unavailable()
+
+        assertEquals(TrackingState.UNAVAILABLE, tracking.state)
+        assertEquals(null, tracking.inFlightRequestId)
+        assertFalse(tracking.officialSurfaceOpened)
+        assertEquals(null, tracking.requestAction {})
+    }
+
+    @Test
     fun `all tracking states render without claiming live proof`() {
         assertEquals("GV-ACTION-UNAVAILABLE: Install and enable exact CSFloat first.", trackingMessage(TrackingState.UNAVAILABLE))
         assertEquals("GV-ACTION-READY: Official CSFloat action is ready. Live authenticated proof pending #7.", trackingMessage(TrackingState.READY))
