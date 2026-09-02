@@ -9,15 +9,15 @@ not record an issue #7 `GO` decision.
 
 | Field | Value |
 | --- | --- |
-| App source commit and build variant | `53aa3a73f4edaf885c960379cd7dadc4b88fd78e`, `debug` |
-| APK | `app/build/outputs/apk/debug/app-debug.apk`, 598,694,552 bytes, SHA-256 `7A46D23548B96BF312F2591D123206ECEAFD098119083E199A026F94604F93C0`; preserved on the campaign host at `C:\Users\esmer\AppData\Local\Temp\sam-gv5-issue5\app-debug-7A46D235.apk` |
+| App source commit and build variant | `4ba640317bc174926fb2e60f351ba21ef8344448`, `debug` |
+| APK | `app/build/outputs/apk/debug/app-debug.apk`, 598,694,552 bytes, SHA-256 `BEE6E46394A0EED60F87CB0EF54DDC502DBB3F5F86C14592410D4FD59416F83C`; preserved on the campaign host at `C:\Users\esmer\AppData\Local\Temp\sam-gv5-issue5\app-debug-BEE6E463.apk` |
 | GeckoView | `153.0.20260810162159`, stable Maven artifact |
 | CSFloat | Official signed Firefox artifact, ID `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}`, version `5.17.0`, GeckoView signed state `2` |
 | CSFloat artifact | `https://addons.mozilla.org/firefox/downloads/file/4957680/csgofloat-5.17.0.xpi`, 7,011,169 bytes, SHA-256 `70C540B8B1DF125596EF615FE37028542DE4D92B3816AD81EB6AD5CE3D11798D` |
 | Host | Windows 11 Pro 64-bit, version `10.0.26200`, build `26200`; Android Studio 2025.2.1 build `AI-252.25557.131.2521.14432022` |
 | Android target | Dedicated AVD `Codex_GeckoView_Campaign_API_36`, serial `emulator-5580`, Android 16/API 36, `x86_64` |
 | Emulator tooling | Android Emulator `36.2.12.0` build `14214601`; adb `36.0.0-13206524` |
-| Test window | 2026-09-02 14:31:18–14:35:50 UTC |
+| Test window | 2026-09-02 14:55:18–14:58:20 UTC |
 | Gate result | Issue #5 machine scenarios pass. Authenticated tracking, alarms, physical-device behavior, and the issue #7 decision remain `NOT RUN`. |
 
 ## Commands and results
@@ -30,7 +30,7 @@ command used `-s emulator-5580`.
 $env:ANDROID_HOME='C:\Users\esmer\AppData\Local\Android\Sdk'
 $env:ANDROID_SERIAL='emulator-5580'
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug lintDebug connectedDebugAndroidTest --rerun-tasks
-# exit 0: BUILD SUCCESSFUL; 21 unit tests, 9 instrumentation tests, debug assembly, and lint all passed
+# exit 0: BUILD SUCCESSFUL; 23 unit tests, 9 instrumentation tests, debug assembly, and lint all passed
 
 $adb='C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
 & $adb -s emulator-5580 install -r .\app\build\outputs\apk\debug\app-debug.apk
@@ -76,14 +76,9 @@ Generated reports:
 | No optional runtime prompt | PASS | No optional-permission API is called. The Firefox artifact's install-time origins already include `*://*.steampowered.com/*`; the official popup therefore displayed its enabled state without an app-simulated prompt. |
 | Honest shell states | PASS | `UNAVAILABLE`, `READY`, `ACTIVE`, and `FAILED` have fixed messages. The [ready capture](evidence/issue-5/gv5-ready.png) shows status recording disabled before a popup. The [active capture](evidence/issue-5/gv5-active.png) was taken only after a second visible official popup. Both states explicitly defer authenticated proof to #7. |
 | Safe failure and recovery | PASS | The [failure capture](evidence/issue-5/gv5-failed.png) shows the clearly labeled deterministic failure and sole recovery action. The [recovered capture](evidence/issue-5/gv5-recovered.png) shows `READY` only after a fresh exact, enabled, same-identity engine query validated the cached action handle. |
-| Duplicate and late callbacks | PASS | Unit tests use monotonic request IDs and prove one in-flight dispatch, exact-once completion, and no state change from stale or duplicate callbacks. |
+| Duplicate and late callbacks | PASS | Unit tests use monotonic non-null request tokens and prove one in-flight dispatch, exact-once completion, null rejection, and no state change from stale or duplicate callbacks. The activity captures the pending token before `Action.click()` and ignores popup callbacks when no matching request is pending. |
 | Redacted diagnostics | PASS | App diagnostics are fixed `GV-*` messages. The bounded PID-only action-error filter found no active-tab, crash, or action failure match. No raw exception, popup DOM, browser storage, account identity, or network body was captured. |
 | GV-08 automation readiness | PASS | The complete popup/failure/recovery path was driven by exact-serial adb input and UI hierarchy inspection. Live authenticated tracking and alarm behavior remain `NOT RUN` for #7. |
-
-The public listing's separate page-status label retained a safe failure message
-during the post-install reload even though the public page remained rendered.
-This does not contribute to the action state or the `ACTIVE` transition; issue
-#6 owns relaunch-aware prototype lifecycle state.
 
 ## Reviewable evidence and privacy
 
@@ -95,11 +90,11 @@ inventory, trade details, payment information, or authentication UI. Popup UI
 hierarchy output was deliberately not retained because it included a randomized
 internal `moz-extension` URL that was unnecessary to prove the visible result.
 
-- [Ready before popup](evidence/issue-5/gv5-ready.png): SHA-256 `45C2AC49415756802DD7CF3DCACE4C966A7CD1A9AB3983106BF707107368EE28`
-- [Official popup](evidence/issue-5/gv5-popup.png): SHA-256 `646B3F67A1A57C875419EB853E99787320900F6FC15FBD26F0D787DF95828B56`
-- [Safe deterministic failure](evidence/issue-5/gv5-failed.png): SHA-256 `2A26CB8C8512BAC05E2D9F7E72EE8D1419F083285B7A1B16AD75C45F67A5056B`
-- [Recovered ready state](evidence/issue-5/gv5-recovered.png): SHA-256 `94E7046DB8E358C3510665B1726EEBE50D06A86B81D3F75ED3893AC76175F1B9`
-- [Recorded visible status](evidence/issue-5/gv5-active.png): SHA-256 `429610CF5F1D5E37450D7BBE9D55C96DB350B809221032436BF3254973CC3584`
+- [Ready before popup](evidence/issue-5/gv5-ready.png): SHA-256 `97A67BC627DAD7E99E6A78EFDEE2201077B3DD924A98DC4B5EB740591AC3B294`
+- [Official popup](evidence/issue-5/gv5-popup.png): SHA-256 `A931AB6B1553EBFA9E286DAAB162940F1319FB5B113F526E4398009C4E5D61F6`
+- [Safe deterministic failure](evidence/issue-5/gv5-failed.png): SHA-256 `8A028855B6ED232484FFEE938C4EA34158A94FDB40EB2078906802F94EB187F9`
+- [Recovered ready state](evidence/issue-5/gv5-recovered.png): SHA-256 `C61811BBEC7F76B50061946D28721FF5C0D0FBB42571ECCFA9649FDBDC7DD929`
+- [Recorded visible status](evidence/issue-5/gv5-active.png): SHA-256 `B965BFC3EE8FE0210344A964982FD8F550EAFE261DBB68C06F3C7CE3A71C1F2A`
 
 ## Known limitations and non-claims
 
