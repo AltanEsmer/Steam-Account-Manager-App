@@ -435,6 +435,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                         { runOnUiThread {
                             csfloatMutationInFlight = false
                             extensionState.text = "GV-CSFLOAT-STATE-FAILED"
+                            revokeOfficialAction()
                         } },
                     )
                 }
@@ -442,6 +443,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             { runOnUiThread {
                 csfloatMutationInFlight = false
                 extensionState.text = "GV-CSFLOAT-STATE-FAILED"
+                revokeOfficialAction()
             } },
         )
     }
