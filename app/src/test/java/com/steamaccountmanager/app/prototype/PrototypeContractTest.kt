@@ -7,35 +7,67 @@ import org.junit.Test
 
 class PrototypeContractTest {
     @Test
-    fun `pending consent preserves every callback item verbatim`() {
-        val permissions = listOf("nativeMessaging", "tabs", "tabs")
-        val origins = listOf("*://*.steampowered.com/*", "https://example.invalid/path")
-        val dataCollection = listOf("technicalAndInteraction")
-
-        val pending = PrototypeConsent.pending(permissions, origins, dataCollection)
-
-        assertEquals(permissions, pending.permissions)
-        assertEquals(origins, pending.origins)
-        assertEquals(dataCollection, pending.dataCollectionPermissions)
+    fun `consent identity must match the exact CSFloat package`() {
+        assertTrue(isExpectedCsfloat(CSFLOAT_ID, CSFLOAT_VERSION))
+        assertFalse(isExpectedCsfloat("unexpected@example.invalid", CSFLOAT_VERSION))
+        assertFalse(isExpectedCsfloat(CSFLOAT_ID, "5.17.1"))
+        assertFalse(isExpectedCsfloat(null, CSFLOAT_VERSION))
     }
 
     @Test
-    fun `consent requires an explicit deny or allow decision`() {
-        val pending = PrototypeConsent.pending(listOf("tabs"), emptyList(), emptyList())
+    fun `install prompt shows callback identity and every callback item verbatim`() {
+        val prompt = installPrompt(
+            name = "Callback name",
+            id = CSFLOAT_ID,
+            version = CSFLOAT_VERSION,
+            permissions = listOf("nativeMessaging", "tabs", "tabs"),
+            origins = listOf("*://*.steampowered.com/*", "https://example.invalid/path"),
+            dataCollectionPermissions = listOf("technicalAndInteraction"),
+        )
 
-        assertFalse(pending.isAccepted)
-        assertEquals(ConsentDecision.DENIED, pending.deny().decision)
-        assertEquals(ConsentDecision.ACCEPTED, pending.allow().decision)
-        assertTrue(pending.allow().isAccepted)
+        assertTrue(prompt.contains("Extension: Callback name"))
+        assertTrue(prompt.contains("ID: $CSFLOAT_ID"))
+        assertTrue(prompt.contains("Version: $CSFLOAT_VERSION"))
+        assertTrue(prompt.contains("Permissions (3):\n• nativeMessaging\n• tabs\n• tabs"))
+        assertTrue(prompt.contains("Origins (2):\n• *://*.steampowered.com/*\n• https://example.invalid/path"))
+        assertTrue(prompt.contains("Data collection (1):\n• technicalAndInteraction"))
     }
 
     @Test
-    fun `diagnostics cannot echo arbitrary sensitive input`() {
-        val secret = "steamLoginSecure=secret-token"
+    fun `diagnostics are fixed allow-listed codes`() {
+        assertEquals(
+            "GV-INSTALL-FAILED: Could not download or install CSFloat. Check the network and retry.",
+            PrototypeDiagnostic.INSTALL_FAILED.message,
+        )
+        assertEquals(
+            "GV-INSTALL-NO-RESULT: GeckoView returned no installed extension. Retry.",
+            PrototypeDiagnostic.INSTALL_NO_RESULT.message,
+        )
+        assertEquals(
+            "GV-PAGE-LOAD-FAILED: The public Steam listing did not load. Check the network and retry.",
+            PrototypeDiagnostic.PAGE_LOAD_FAILED.message,
+        )
+        PrototypeDiagnostic.entries.forEach { diagnostic ->
+            assertFalse(diagnostic.message.contains("steamLoginSecure=secret-token"))
+        }
+    }
 
-        val diagnostic = PrototypeDiagnostic.installFailure(IllegalStateException(secret))
-
-        assertEquals("Extension installation failed. Retry or open the page externally.", diagnostic)
-        assertFalse(diagnostic.contains(secret))
+    @Test
+    fun `denial reports only expected extension engine state`() {
+        assertEquals(DenialState.EXPECTED_ABSENT, denialState(emptyList()))
+        assertEquals(DenialState.EXPECTED_DISABLED, denialState(listOf(false)))
+        assertEquals(DenialState.EXPECTED_ENABLED, denialState(listOf(false, true)))
+        assertEquals(
+            "GV-INSTALL-DENIED-ABSENT: Consent denied; engine reports expected CSFloat ID absent. Retry is available.",
+            denialMessage(DenialState.EXPECTED_ABSENT),
+        )
+        assertEquals(
+            "GV-INSTALL-DENIED-DISABLED: Consent denied; engine reports expected CSFloat ID disabled. Retry is available.",
+            denialMessage(DenialState.EXPECTED_DISABLED),
+        )
+        assertEquals(
+            "GV-INSTALL-DENIED-ENABLED: Consent denied, but engine reports expected CSFloat ID enabled. Close the prototype.",
+            denialMessage(DenialState.EXPECTED_ENABLED),
+        )
     }
 }
