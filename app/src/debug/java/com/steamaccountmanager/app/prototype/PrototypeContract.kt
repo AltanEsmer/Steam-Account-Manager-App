@@ -69,6 +69,18 @@ fun denialMessage(state: DenialState): String = when (state) {
 fun isEnabledExpectedExtension(id: String?, version: String?, enabled: Boolean): Boolean =
     enabled && isExpectedCsfloat(id, version)
 
+fun canReuseValidatedAction(
+    boundId: String?,
+    boundVersion: String?,
+    discoveredId: String?,
+    discoveredVersion: String?,
+    discoveredEnabled: Boolean,
+    hasEffectiveAction: Boolean,
+): Boolean = hasEffectiveAction &&
+    isExpectedCsfloat(boundId, boundVersion) &&
+    isEnabledExpectedExtension(discoveredId, discoveredVersion, discoveredEnabled) &&
+    boundId == discoveredId && boundVersion == discoveredVersion
+
 enum class TrackingState { UNAVAILABLE, READY, ACTIVE, FAILED }
 
 fun trackingMessage(state: TrackingState): String = when (state) {

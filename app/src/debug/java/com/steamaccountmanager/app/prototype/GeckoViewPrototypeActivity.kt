@@ -220,20 +220,36 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         runtime.webExtensionController.list().accept(
             { extensions ->
                 runOnUiThread {
-                    val extension = extensions?.singleOrNull {
+                    if (extensions == null) {
+                        tracking.discoveryFailed()
+                        renderTracking()
+                        return@runOnUiThread
+                    }
+                    val extension = extensions.singleOrNull {
                         isEnabledExpectedExtension(it.id, it.metaData.version, it.metaData.enabled)
                     }
-                    if (extension == null) {
+                    val bound = boundExtension
+                    if (canReuseValidatedAction(
+                            bound?.id,
+                            bound?.metaData?.version,
+                            extension?.id,
+                            extension?.metaData?.version,
+                            extension?.metaData?.enabled == true,
+                            effectiveAction != null,
+                        )
+                    ) {
+                        tracking.actionAvailable()
+                        renderTracking()
+                    } else if (extension == null) {
                         clearActionDelegates()
                         renderTracking()
-                    } else {
+                    } else if (extension !== bound) {
                         bindAction(extension)
                     }
                 }
             },
             {
                 runOnUiThread {
-                    clearActionDelegates()
                     tracking.discoveryFailed()
                     renderTracking()
                 }
@@ -299,10 +315,12 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             if (callbackSession == null) defaultAction = action else sessionAction = action
             val default = defaultAction
             val sessionOverride = sessionAction
-            if (default != null && sessionOverride != null) {
-                effectiveAction = sessionOverride.withDefault(default)
-                if (effectiveAction?.enabled == true) tracking.actionAvailable() else tracking.unavailable()
+            effectiveAction = if (default != null && sessionOverride != null) {
+                sessionOverride.withDefault(default)
+            } else {
+                default
             }
+            if (effectiveAction?.enabled == true) tracking.actionAvailable() else tracking.unavailable()
             renderTracking()
         }
     }
