@@ -70,4 +70,68 @@ class PrototypeContractTest {
             denialMessage(DenialState.EXPECTED_ENABLED),
         )
     }
+
+    @Test
+    fun `action availability requires exact enabled CSFloat`() {
+        assertTrue(isEnabledExpectedExtension(CSFLOAT_ID, CSFLOAT_VERSION, true))
+        assertFalse(isEnabledExpectedExtension(CSFLOAT_ID, CSFLOAT_VERSION, false))
+        assertFalse(isEnabledExpectedExtension(CSFLOAT_ID, "5.17.1", true))
+        assertFalse(isEnabledExpectedExtension("other@example.invalid", CSFLOAT_VERSION, true))
+    }
+
+    @Test
+    fun `all tracking states render without claiming live proof`() {
+        assertEquals("GV-ACTION-UNAVAILABLE: Install and enable exact CSFloat first.", trackingMessage(TrackingState.UNAVAILABLE))
+        assertEquals("GV-ACTION-READY: Official CSFloat action is ready. Live authenticated proof pending #7.", trackingMessage(TrackingState.READY))
+        assertEquals("GV-ACTION-ACTIVE: Visible official CSFloat status recorded. Live authenticated proof pending #7.", trackingMessage(TrackingState.ACTIVE))
+        assertEquals("GV-ACTION-FAILED: Official CSFloat popup failed. Recover and retry.", trackingMessage(TrackingState.FAILED))
+    }
+
+    @Test
+    fun `install discovery click and popup never imply active`() {
+        val tracking = PrototypeTracking()
+        tracking.actionAvailable()
+        val request = tracking.requestAction {}
+        tracking.popupOpened(requireNotNull(request))
+
+        assertEquals(TrackingState.READY, tracking.state)
+        tracking.recordVisibleOfficialStatus()
+        assertEquals(TrackingState.ACTIVE, tracking.state)
+    }
+
+    @Test
+    fun `action requests are monotonic exact once and ignore duplicates and late callbacks`() {
+        val tracking = PrototypeTracking().apply { actionAvailable() }
+        var clicks = 0
+
+        val first = tracking.requestAction { clicks++ }
+        assertEquals(1L, first)
+        assertEquals(null, tracking.requestAction { clicks++ })
+        assertEquals(1, clicks)
+
+        tracking.popupOpened(requireNotNull(first))
+        tracking.popupFailed(first)
+        val second = tracking.requestAction { clicks++ }
+        assertEquals(2L, second)
+        tracking.popupFailed(requireNotNull(second))
+        tracking.popupOpened(second)
+
+        assertEquals(2, clicks)
+        assertEquals(TrackingState.FAILED, tracking.state)
+        assertEquals(null, tracking.inFlightRequestId)
+    }
+
+    @Test
+    fun `simulation fails deterministically and recovery requires a new enabled action callback`() {
+        val tracking = PrototypeTracking().apply { actionAvailable() }
+        tracking.simulatePopupFailure()
+        assertEquals(TrackingState.FAILED, tracking.state)
+        assertEquals("GV-SIMULATED-POPUP-FAILURE: Test-only failure recorded. Recover to rediscover CSFloat.", tracking.diagnostic)
+
+        tracking.recover()
+        assertEquals(TrackingState.UNAVAILABLE, tracking.state)
+        assertEquals(null, tracking.requestAction {})
+        tracking.actionAvailable()
+        assertEquals(TrackingState.READY, tracking.state)
+    }
 }
