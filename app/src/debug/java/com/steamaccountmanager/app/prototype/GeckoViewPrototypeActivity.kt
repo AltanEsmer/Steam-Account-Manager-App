@@ -54,12 +54,12 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             },
         )
 
-        runtime = GeckoRuntime.create(this)
+        runtime = sharedRuntime ?: GeckoRuntime.create(applicationContext).also { sharedRuntime = it }
         runtime.webExtensionController.promptDelegate = InstallConsentPrompt()
         session = GeckoSession().apply {
             progressDelegate = object : GeckoSession.ProgressDelegate {
                 override fun onPageStop(session: GeckoSession, success: Boolean) {
-                    if (!success) status.text = PrototypeDiagnostic.LOAD_FAILURE
+                    if (!success) runOnUiThread { status.text = PrototypeDiagnostic.LOAD_FAILURE }
                 }
             }
             open(runtime)
@@ -76,16 +76,23 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private fun installExtension() {
         installButton.isEnabled = false
         status.text = "Installing signed CSFloat package…"
-        runtime.webExtensionController.install(CSFLOAT_XPI_URL).accept(
+        runtime.webExtensionController.install(
+            CSFLOAT_XPI_URL,
+            WebExtensionController.INSTALLATION_METHOD_MANAGER,
+        ).accept(
             { extension ->
-                extension?.let(::showInstalled) ?: run {
-                    status.text = PrototypeDiagnostic.installFailure(null)
-                    installButton.isEnabled = true
+                runOnUiThread {
+                    extension?.let(::showInstalled) ?: run {
+                        status.text = PrototypeDiagnostic.installFailure(null)
+                        installButton.isEnabled = true
+                    }
                 }
             },
             {
-                status.text = PrototypeDiagnostic.installFailure(it)
-                installButton.isEnabled = true
+                runOnUiThread {
+                    status.text = PrototypeDiagnostic.installFailure(it)
+                    installButton.isEnabled = true
+                }
             },
         )
     }
@@ -94,11 +101,12 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         val exactPackage = extension.id == CSFLOAT_ID && extension.metaData.version == CSFLOAT_VERSION
         status.text = if (exactPackage) {
             "Installed and ready: ${extension.metaData.name} ${extension.metaData.version}; " +
-                "GeckoView signed state ${extension.metaData.signedState}. Reload the listing to verify visible injection."
+                "GeckoView signed state ${extension.metaData.signedState}. Reloading the listing for injection."
         } else {
             "Installation failed package verification. Expected CSFloat $CSFLOAT_VERSION."
         }
         installButton.isEnabled = !exactPackage
+        if (exactPackage) session.reload()
     }
 
     private inner class InstallConsentPrompt : WebExtensionController.PromptDelegate {
@@ -124,37 +132,41 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 addAll(consent.dataCollectionPermissions.map { "• $it" })
             }.joinToString("\n")
 
-            AlertDialog.Builder(this@GeckoViewPrototypeActivity)
-                .setTitle("Install-time access request")
-                .setMessage(lines)
-                .setNegativeButton("Deny") { _, _ ->
-                    consent.deny()
-                    status.text = "Installation denied. CSFloat was not installed or enabled."
-                    installButton.isEnabled = true
-                    result.complete(WebExtension.PermissionPromptResponse(false, false, false))
-                }
-                .setPositiveButton("Accept") { _, _ ->
-                    val accepted = consent.allow()
-                    status.text = "Consent accepted. Finishing signed-package installation…"
-                    result.complete(
-                        WebExtension.PermissionPromptResponse(
-                            accepted.isAccepted,
-                            false,
-                            accepted.dataCollectionPermissions.isNotEmpty(),
-                        ),
-                    )
-                }
-                .setOnCancelListener {
-                    status.text = "Installation denied. CSFloat was not installed or enabled."
-                    installButton.isEnabled = true
-                    result.complete(WebExtension.PermissionPromptResponse(false, false, false))
-                }
-                .show()
+            runOnUiThread {
+                AlertDialog.Builder(this@GeckoViewPrototypeActivity)
+                    .setTitle("Install-time access request")
+                    .setMessage(lines)
+                    .setNegativeButton("Deny") { _, _ ->
+                        consent.deny()
+                        status.text = "Installation denied. CSFloat was not installed or enabled."
+                        installButton.isEnabled = true
+                        result.complete(WebExtension.PermissionPromptResponse(false, false, false))
+                    }
+                    .setPositiveButton("Accept") { _, _ ->
+                        val accepted = consent.allow()
+                        status.text = "Consent accepted. Finishing signed-package installation…"
+                        result.complete(
+                            WebExtension.PermissionPromptResponse(
+                                accepted.isAccepted,
+                                false,
+                                accepted.dataCollectionPermissions.isNotEmpty(),
+                            ),
+                        )
+                    }
+                    .setOnCancelListener {
+                        status.text = "Installation denied. CSFloat was not installed or enabled."
+                        installButton.isEnabled = true
+                        result.complete(WebExtension.PermissionPromptResponse(false, false, false))
+                    }
+                    .show()
+            }
             return result
         }
     }
 
     private companion object {
+        var sharedRuntime: GeckoRuntime? = null
+
         const val STEAM_LISTING_URL =
             "https://steamcommunity.com/market/listings/730/AK-47%20%7C%20Redline%20%28Field-Tested%29"
         const val CSFLOAT_XPI_URL =
