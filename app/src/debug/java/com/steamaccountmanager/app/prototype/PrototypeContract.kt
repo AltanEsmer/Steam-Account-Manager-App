@@ -126,26 +126,29 @@ class PrototypeTracking {
         return requestId
     }
 
-    fun popupOpened(requestId: Long?) {
-        if (requestId != inFlightRequestId) return
+    fun popupOpened(requestId: Long?): Boolean {
+        if (requestId == null || requestId != inFlightRequestId) return false
         inFlightRequestId = null
         officialSurfaceOpened = true
+        return true
     }
 
-    fun popupFailed(requestId: Long?) {
-        if (requestId != inFlightRequestId) return
+    fun popupFailed(requestId: Long?): Boolean {
+        if (requestId == null || requestId != inFlightRequestId) return false
         inFlightRequestId = null
         state = TrackingState.FAILED
         officialSurfaceOpened = false
         diagnostic = trackingMessage(TrackingState.FAILED)
+        return true
     }
 
-    fun actionClickFailed(requestId: Long?) {
-        if (requestId != inFlightRequestId) return
+    fun actionClickFailed(requestId: Long?): Boolean {
+        if (requestId == null || requestId != inFlightRequestId) return false
         inFlightRequestId = null
         state = TrackingState.FAILED
         officialSurfaceOpened = false
         diagnostic = "GV-ACTION-CLICK-FAILED: Official CSFloat action did not open. Recover and retry."
+        return true
     }
 
     fun discoveryFailed() {

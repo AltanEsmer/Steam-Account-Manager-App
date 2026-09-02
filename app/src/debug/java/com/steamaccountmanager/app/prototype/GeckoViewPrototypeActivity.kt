@@ -35,6 +35,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private var popupDialog: Dialog? = null
     private var popupView: GeckoView? = null
     private var popupSession: GeckoSession? = null
+    private var pendingPopupRequestId: Long? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,6 +64,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             text = "Simulate popup failure (test only)"
             setOnClickListener {
                 closePopup()
+                pendingPopupRequestId = null
                 tracking.simulatePopupFailure()
                 renderTracking()
             }
@@ -71,6 +73,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             text = "Recover and rediscover CSFloat"
             setOnClickListener {
                 closePopup()
+                pendingPopupRequestId = null
                 tracking.recover()
                 renderTracking()
                 discoverAction()
@@ -215,6 +218,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun discoverAction() {
+        pendingPopupRequestId = null
         tracking.unavailable()
         renderTracking()
         runtime.webExtensionController.list().accept(
@@ -265,6 +269,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun clearActionDelegates() {
+        pendingPopupRequestId = null
         boundExtension?.let { extension ->
             extension.setActionDelegate(null)
             session.webExtensionController.setActionDelegate(extension, null)
@@ -292,9 +297,13 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             extension: WebExtension,
             action: WebExtension.Action,
         ): GeckoResult<GeckoSession> {
-            if (popupSession == null) return openPopup()
+            val requestId = pendingPopupRequestId
+            if (requestId == null || requestId != tracking.inFlightRequestId) {
+                return GeckoResult.fromValue(null)
+            }
+            if (popupSession == null) return openPopup(requestId)
             closePopup()
-            tracking.popupOpened(tracking.inFlightRequestId)
+            if (tracking.popupOpened(requestId)) pendingPopupRequestId = null
             renderTracking()
             return GeckoResult.fromValue(null)
         }
@@ -302,7 +311,15 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         override fun onOpenPopup(
             extension: WebExtension,
             action: WebExtension.Action,
-        ): GeckoResult<GeckoSession> = openPopup()
+        ): GeckoResult<GeckoSession> {
+            val requestId = pendingPopupRequestId
+            if (requestId == null || requestId != tracking.inFlightRequestId) {
+                return GeckoResult.fromValue(null)
+            }
+            // Gecko does not return the originating request token. The single pending
+            // dispatch is the only correlatable callback; the reducer rejects explicit stale tokens.
+            return openPopup(requestId)
+        }
     }
 
     private fun receiveAction(
@@ -327,18 +344,19 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
 
     private fun requestAction() {
         val action = effectiveAction ?: return
-        var requestId: Long? = null
-        requestId = tracking.requestAction {
+        tracking.requestAction {
+            val requestId = requireNotNull(tracking.inFlightRequestId)
+            pendingPopupRequestId = requestId
             try {
                 action.click()
             } catch (_: RuntimeException) {
-                tracking.actionClickFailed(requestId ?: tracking.inFlightRequestId)
+                if (tracking.actionClickFailed(requestId)) pendingPopupRequestId = null
             }
         }
         renderTracking()
     }
 
-    private fun openPopup(): GeckoResult<GeckoSession> = try {
+    private fun openPopup(requestId: Long): GeckoResult<GeckoSession> = try {
         closePopup()
         val popup = GeckoSession().apply { open(runtime) }
         val view = GeckoView(this).apply {
@@ -360,11 +378,11 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         popupSession = popup
         popupView = view
         popupDialog = dialog
-        tracking.popupOpened(tracking.inFlightRequestId)
+        if (tracking.popupOpened(requestId)) pendingPopupRequestId = null
         renderTracking()
         GeckoResult.fromValue(popup)
     } catch (_: RuntimeException) {
-        tracking.popupFailed(tracking.inFlightRequestId)
+        if (tracking.popupFailed(requestId)) pendingPopupRequestId = null
         renderTracking()
         GeckoResult.fromException(IllegalStateException("GV-ACTION-FAILED"))
     }
