@@ -118,6 +118,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             loadUri(STEAM_LISTING_URL)
         }
         geckoView.setSession(session)
+        runtime.webExtensionController.setTabActive(session, true)
         renderTracking()
         discoverAction()
     }
@@ -126,6 +127,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         closePopup()
         clearActionDelegates()
         runtime.webExtensionController.promptDelegate = null
+        runtime.webExtensionController.setTabActive(session, false)
         session.close()
         super.onDestroy()
     }
@@ -363,7 +365,8 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         trackingStatus.text = tracking.diagnostic ?: trackingMessage(tracking.state)
         val canAct = tracking.state == TrackingState.READY || tracking.state == TrackingState.ACTIVE
         actionButton.isEnabled = canAct && tracking.inFlightRequestId == null && effectiveAction != null
-        recordStatusButton.isEnabled = tracking.state == TrackingState.READY && tracking.inFlightRequestId == null
+        recordStatusButton.isEnabled = tracking.state == TrackingState.READY &&
+            tracking.inFlightRequestId == null && tracking.officialSurfaceOpened
         simulateFailureButton.isEnabled = tracking.state == TrackingState.READY || tracking.inFlightRequestId != null
         recoverButton.isEnabled = tracking.state == TrackingState.FAILED
     }

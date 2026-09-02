@@ -89,12 +89,15 @@ class PrototypeTracking {
         private set
     var diagnostic: String? = null
         private set
+    var officialSurfaceOpened = false
+        private set
     private var nextRequestId = 1L
 
     fun unavailable() {
         state = TrackingState.UNAVAILABLE
         inFlightRequestId = null
         diagnostic = null
+        officialSurfaceOpened = false
     }
 
     fun actionAvailable() {
@@ -112,13 +115,16 @@ class PrototypeTracking {
     }
 
     fun popupOpened(requestId: Long?) {
-        if (requestId == inFlightRequestId) inFlightRequestId = null
+        if (requestId != inFlightRequestId) return
+        inFlightRequestId = null
+        officialSurfaceOpened = true
     }
 
     fun popupFailed(requestId: Long?) {
         if (requestId != inFlightRequestId) return
         inFlightRequestId = null
         state = TrackingState.FAILED
+        officialSurfaceOpened = false
         diagnostic = trackingMessage(TrackingState.FAILED)
     }
 
@@ -126,12 +132,14 @@ class PrototypeTracking {
         if (requestId != inFlightRequestId) return
         inFlightRequestId = null
         state = TrackingState.FAILED
+        officialSurfaceOpened = false
         diagnostic = "GV-ACTION-CLICK-FAILED: Official CSFloat action did not open. Recover and retry."
     }
 
     fun discoveryFailed() {
         inFlightRequestId = null
         state = TrackingState.FAILED
+        officialSurfaceOpened = false
         diagnostic = "GV-ACTION-DISCOVERY-FAILED: Could not inspect installed CSFloat state. Recover and retry."
     }
 
@@ -139,6 +147,7 @@ class PrototypeTracking {
         if (state != TrackingState.READY && inFlightRequestId == null) return
         inFlightRequestId = null
         state = TrackingState.FAILED
+        officialSurfaceOpened = false
         diagnostic =
             "GV-SIMULATED-POPUP-FAILURE: Test-only failure recorded. Recover to rediscover CSFloat."
     }
@@ -148,6 +157,8 @@ class PrototypeTracking {
     }
 
     fun recordVisibleOfficialStatus() {
-        if (state == TrackingState.READY && inFlightRequestId == null) state = TrackingState.ACTIVE
+        if (state == TrackingState.READY && inFlightRequestId == null && officialSurfaceOpened) {
+            state = TrackingState.ACTIVE
+        }
     }
 }
