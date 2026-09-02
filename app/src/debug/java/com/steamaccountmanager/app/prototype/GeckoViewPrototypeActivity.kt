@@ -1,6 +1,7 @@
 package com.steamaccountmanager.app.prototype
 
 import android.app.AlertDialog
+import android.app.Dialog
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.Button
@@ -19,8 +20,21 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private lateinit var session: GeckoSession
     private lateinit var status: TextView
     private lateinit var installButton: Button
+    private lateinit var trackingStatus: TextView
+    private lateinit var actionButton: Button
+    private lateinit var recordStatusButton: Button
+    private lateinit var simulateFailureButton: Button
+    private lateinit var recoverButton: Button
     private var installDenied = false
     private var installFailure = PrototypeDiagnostic.INSTALL_FAILED
+    private val tracking = PrototypeTracking()
+    private var boundExtension: WebExtension? = null
+    private var defaultAction: WebExtension.Action? = null
+    private var sessionAction: WebExtension.Action? = null
+    private var effectiveAction: WebExtension.Action? = null
+    private var popupDialog: Dialog? = null
+    private var popupView: GeckoView? = null
+    private var popupSession: GeckoSession? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,6 +47,35 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             text = "Review and install CSFloat"
             setOnClickListener { installExtension() }
         }
+        trackingStatus = TextView(this).apply { setPadding(24, 8, 24, 8) }
+        actionButton = Button(this).apply {
+            text = "Open official CSFloat action"
+            setOnClickListener { requestAction() }
+        }
+        recordStatusButton = Button(this).apply {
+            text = "Record visible official status"
+            setOnClickListener {
+                tracking.recordVisibleOfficialStatus()
+                renderTracking()
+            }
+        }
+        simulateFailureButton = Button(this).apply {
+            text = "Simulate popup failure (test only)"
+            setOnClickListener {
+                closePopup()
+                tracking.simulatePopupFailure()
+                renderTracking()
+            }
+        }
+        recoverButton = Button(this).apply {
+            text = "Recover and rediscover CSFloat"
+            setOnClickListener {
+                closePopup()
+                tracking.recover()
+                renderTracking()
+                discoverAction()
+            }
+        }
         val metadata = TextView(this).apply {
             text = ARTIFACT_METADATA
             setPadding(24, 8, 24, 12)
@@ -44,6 +87,11 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 orientation = LinearLayout.VERTICAL
                 addView(status)
                 addView(installButton)
+                addView(trackingStatus)
+                addView(actionButton)
+                addView(recordStatusButton)
+                addView(simulateFailureButton)
+                addView(recoverButton)
                 addView(metadata)
                 addView(
                     geckoView,
@@ -70,9 +118,14 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             loadUri(STEAM_LISTING_URL)
         }
         geckoView.setSession(session)
+        renderTracking()
+        discoverAction()
     }
 
     override fun onDestroy() {
+        closePopup()
+        clearActionDelegates()
+        runtime.webExtensionController.promptDelegate = null
         session.close()
         super.onDestroy()
     }
@@ -115,6 +168,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 "GeckoView signed state ${extension.metaData.signedState}. Reloading the listing for injection."
             installButton.isEnabled = false
             session.reload()
+            discoverAction()
             return
         }
 
@@ -156,6 +210,162 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 }
             },
         )
+    }
+
+    private fun discoverAction() {
+        tracking.unavailable()
+        renderTracking()
+        runtime.webExtensionController.list().accept(
+            { extensions ->
+                runOnUiThread {
+                    val extension = extensions?.singleOrNull {
+                        isEnabledExpectedExtension(it.id, it.metaData.version, it.metaData.enabled)
+                    }
+                    if (extension == null) {
+                        clearActionDelegates()
+                        renderTracking()
+                    } else {
+                        bindAction(extension)
+                    }
+                }
+            },
+            {
+                runOnUiThread {
+                    clearActionDelegates()
+                    tracking.discoveryFailed()
+                    renderTracking()
+                }
+            },
+        )
+    }
+
+    private fun bindAction(extension: WebExtension) {
+        clearActionDelegates()
+        boundExtension = extension
+        extension.setActionDelegate(actionDelegate)
+        session.webExtensionController.setActionDelegate(extension, actionDelegate)
+    }
+
+    private fun clearActionDelegates() {
+        boundExtension?.let { extension ->
+            extension.setActionDelegate(null)
+            session.webExtensionController.setActionDelegate(extension, null)
+        }
+        boundExtension = null
+        defaultAction = null
+        sessionAction = null
+        effectiveAction = null
+    }
+
+    private val actionDelegate = object : WebExtension.ActionDelegate {
+        override fun onBrowserAction(
+            extension: WebExtension,
+            callbackSession: GeckoSession?,
+            action: WebExtension.Action,
+        ) = receiveAction(extension, callbackSession, action)
+
+        override fun onPageAction(
+            extension: WebExtension,
+            callbackSession: GeckoSession?,
+            action: WebExtension.Action,
+        ) = receiveAction(extension, callbackSession, action)
+
+        override fun onTogglePopup(
+            extension: WebExtension,
+            action: WebExtension.Action,
+        ): GeckoResult<GeckoSession> {
+            if (popupSession == null) return openPopup()
+            closePopup()
+            tracking.popupOpened(tracking.inFlightRequestId)
+            renderTracking()
+            return GeckoResult.fromValue(null)
+        }
+
+        override fun onOpenPopup(
+            extension: WebExtension,
+            action: WebExtension.Action,
+        ): GeckoResult<GeckoSession> = openPopup()
+    }
+
+    private fun receiveAction(
+        extension: WebExtension,
+        callbackSession: GeckoSession?,
+        action: WebExtension.Action,
+    ) {
+        if (extension !== boundExtension) return
+        runOnUiThread {
+            if (callbackSession == null) defaultAction = action else sessionAction = action
+            val default = defaultAction
+            val sessionOverride = sessionAction
+            if (default != null && sessionOverride != null) {
+                effectiveAction = sessionOverride.withDefault(default)
+                if (effectiveAction?.enabled == true) tracking.actionAvailable() else tracking.unavailable()
+            }
+            renderTracking()
+        }
+    }
+
+    private fun requestAction() {
+        val action = effectiveAction ?: return
+        var requestId: Long? = null
+        requestId = tracking.requestAction {
+            try {
+                action.click()
+            } catch (_: RuntimeException) {
+                tracking.actionClickFailed(requestId ?: tracking.inFlightRequestId)
+            }
+        }
+        renderTracking()
+    }
+
+    private fun openPopup(): GeckoResult<GeckoSession> = try {
+        closePopup()
+        val popup = GeckoSession().apply { open(runtime) }
+        val view = GeckoView(this).apply {
+            minimumHeight = 600
+            setSession(popup)
+        }
+        val dialog = Dialog(this).apply {
+            setTitle("Official CSFloat popup")
+            setContentView(
+                view,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            setOnDismissListener { closePopup() }
+            show()
+        }
+        popupSession = popup
+        popupView = view
+        popupDialog = dialog
+        tracking.popupOpened(tracking.inFlightRequestId)
+        renderTracking()
+        GeckoResult.fromValue(popup)
+    } catch (_: RuntimeException) {
+        tracking.popupFailed(tracking.inFlightRequestId)
+        renderTracking()
+        GeckoResult.fromException(IllegalStateException("GV-ACTION-FAILED"))
+    }
+
+    private fun closePopup() {
+        popupDialog?.setOnDismissListener(null)
+        popupDialog?.dismiss()
+        popupDialog = null
+        popupView?.releaseSession()
+        popupView = null
+        popupSession?.close()
+        popupSession = null
+    }
+
+    private fun renderTracking() {
+        trackingStatus.text = tracking.diagnostic ?: trackingMessage(tracking.state)
+        val canAct = tracking.state == TrackingState.READY || tracking.state == TrackingState.ACTIVE
+        actionButton.isEnabled = canAct && tracking.inFlightRequestId == null && effectiveAction != null
+        recordStatusButton.isEnabled = tracking.state == TrackingState.READY && tracking.inFlightRequestId == null
+        simulateFailureButton.isEnabled = tracking.state == TrackingState.READY || tracking.inFlightRequestId != null
+        recoverButton.isEnabled = tracking.state == TrackingState.FAILED
     }
 
     private inner class InstallConsentPrompt : WebExtensionController.PromptDelegate {

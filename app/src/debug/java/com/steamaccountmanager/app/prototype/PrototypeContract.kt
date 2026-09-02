@@ -65,3 +65,89 @@ fun denialMessage(state: DenialState): String = when (state) {
     DenialState.EXPECTED_ENABLED ->
         "GV-INSTALL-DENIED-ENABLED: Consent denied, but engine reports expected CSFloat ID enabled. Close the prototype."
 }
+
+fun isEnabledExpectedExtension(id: String?, version: String?, enabled: Boolean): Boolean =
+    enabled && isExpectedCsfloat(id, version)
+
+enum class TrackingState { UNAVAILABLE, READY, ACTIVE, FAILED }
+
+fun trackingMessage(state: TrackingState): String = when (state) {
+    TrackingState.UNAVAILABLE ->
+        "GV-ACTION-UNAVAILABLE: Install and enable exact CSFloat first."
+    TrackingState.READY ->
+        "GV-ACTION-READY: Official CSFloat action is ready. Live authenticated proof pending #7."
+    TrackingState.ACTIVE ->
+        "GV-ACTION-ACTIVE: Visible official CSFloat status recorded. Live authenticated proof pending #7."
+    TrackingState.FAILED ->
+        "GV-ACTION-FAILED: Official CSFloat popup failed. Recover and retry."
+}
+
+class PrototypeTracking {
+    var state = TrackingState.UNAVAILABLE
+        private set
+    var inFlightRequestId: Long? = null
+        private set
+    var diagnostic: String? = null
+        private set
+    private var nextRequestId = 1L
+
+    fun unavailable() {
+        state = TrackingState.UNAVAILABLE
+        inFlightRequestId = null
+        diagnostic = null
+    }
+
+    fun actionAvailable() {
+        if (state == TrackingState.UNAVAILABLE) state = TrackingState.READY
+    }
+
+    fun requestAction(click: () -> Unit): Long? {
+        if ((state != TrackingState.READY && state != TrackingState.ACTIVE) || inFlightRequestId != null) {
+            return null
+        }
+        val requestId = nextRequestId++
+        inFlightRequestId = requestId
+        click()
+        return requestId
+    }
+
+    fun popupOpened(requestId: Long?) {
+        if (requestId == inFlightRequestId) inFlightRequestId = null
+    }
+
+    fun popupFailed(requestId: Long?) {
+        if (requestId != inFlightRequestId) return
+        inFlightRequestId = null
+        state = TrackingState.FAILED
+        diagnostic = trackingMessage(TrackingState.FAILED)
+    }
+
+    fun actionClickFailed(requestId: Long?) {
+        if (requestId != inFlightRequestId) return
+        inFlightRequestId = null
+        state = TrackingState.FAILED
+        diagnostic = "GV-ACTION-CLICK-FAILED: Official CSFloat action did not open. Recover and retry."
+    }
+
+    fun discoveryFailed() {
+        inFlightRequestId = null
+        state = TrackingState.FAILED
+        diagnostic = "GV-ACTION-DISCOVERY-FAILED: Could not inspect installed CSFloat state. Recover and retry."
+    }
+
+    fun simulatePopupFailure() {
+        if (state != TrackingState.READY && inFlightRequestId == null) return
+        inFlightRequestId = null
+        state = TrackingState.FAILED
+        diagnostic =
+            "GV-SIMULATED-POPUP-FAILURE: Test-only failure recorded. Recover to rediscover CSFloat."
+    }
+
+    fun recover() {
+        if (state == TrackingState.FAILED) unavailable()
+    }
+
+    fun recordVisibleOfficialStatus() {
+        if (state == TrackingState.READY && inFlightRequestId == null) state = TrackingState.ACTIVE
+    }
+}
