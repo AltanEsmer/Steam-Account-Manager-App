@@ -216,8 +216,11 @@ Use the same target throughout one run.
 
     Expected: Each control behaves predictably and never crosses from A to B. Missing
     required controls or broken history means GV-15 `FAIL`. The new-window request
-    remains in-app on the selected profile; an unrelated new-window target remains
+    is routed into the existing selected session in this single-window prototype;
+    an unrelated new-window target remains
     blocked with the same explicit external-browser choice.
+    Authentication flows using `window.opener`, `postMessage`, or `window.close`
+    still require human verification; same-session routing does not prove them.
 
 33. Exercise the labeled popup failure and recovery controls, then observe one real
     recoverable network/load failure if it occurs naturally.

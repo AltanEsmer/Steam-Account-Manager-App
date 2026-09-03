@@ -38,7 +38,6 @@ import java.util.concurrent.Executors
 class GeckoViewPrototypeActivity : ComponentActivity() {
     private lateinit var runtime: GeckoRuntime
     private lateinit var session: GeckoSession
-    private lateinit var geckoView: GeckoView
     private lateinit var status: TextView
     private lateinit var installButton: Button
     private lateinit var trackingStatus: TextView
@@ -76,9 +75,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private var forceMissingExternalHandler = false
     private var navigationTestLoading = false
     private var reloading = false
-    private var newWindowLoading: GeckoSession? = null
-    private var newWindowOpener: GeckoSession? = null
-    private var pendingNewSession: GeckoSession? = null
+    private var sameWindowLoading = false
 
     private val navigationDelegate = object : GeckoSession.NavigationDelegate {
         override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
@@ -109,28 +106,14 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         ): GeckoResult<AllowOrDeny> {
             val allowed = isPrototypeNavigationAllowed(request.uri, slot)
             if (!allowed) runOnUiThread { showBlockedNavigation(request.uri) }
+            if (allowed && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
+                sameWindowLoading = true
+                Handler(Looper.getMainLooper()).post {
+                    if (!isDestroyed) session.loadUri(request.uri)
+                }
+                return GeckoResult.fromValue(AllowOrDeny.DENY)
+            }
             return GeckoResult.fromValue(if (allowed) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
-        }
-
-        override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
-            if (!isPrototypeNavigationAllowed(uri, slot)) {
-                runOnUiThread { showBlockedNavigation(uri) }
-                return null
-            }
-            val next = GeckoSession().also(::configureSession)
-            pendingNewSession = next
-            newWindowLoading = next
-            newWindowOpener = session
-            Handler(Looper.getMainLooper()).post {
-                if (isDestroyed || pendingNewSession !== next) return@post
-                geckoView.releaseSession()
-                runtime.webExtensionController.setTabActive(session, false)
-                this@GeckoViewPrototypeActivity.session = next
-                pendingNewSession = null
-                geckoView.setSession(next)
-                runtime.webExtensionController.setTabActive(next, true)
-            }
-            return GeckoResult.fromValue(next)
         }
     }
 
@@ -233,7 +216,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             setPadding(24, 8, 24, 12)
             setTextIsSelectable(true)
         }
-        geckoView = GeckoView(this)
+        val geckoView = GeckoView(this)
         val controls = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(status)
@@ -348,10 +331,6 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         runtime.webExtensionController.promptDelegate = null
         runtime.webExtensionController.setTabActive(session, false)
         session.close()
-        newWindowOpener?.takeIf { it !== session }?.close()
-        newWindowOpener = null
-        pendingNewSession?.takeIf { it !== session }?.close()
-        pendingNewSession = null
         super.onDestroy()
     }
 
@@ -369,11 +348,9 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         target.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStop(session: GeckoSession, success: Boolean) = runOnUiThread {
                 if (!success) status.text = PrototypeDiagnostic.PAGE_LOAD_FAILED.message
-                else if (newWindowLoading === session) {
-                    newWindowLoading = null
-                    newWindowOpener?.close()
-                    newWindowOpener = null
-                    status.text = "GV-NAVIGATION-NEW-WINDOW"
+                else if (sameWindowLoading) {
+                    sameWindowLoading = false
+                    status.text = "GV-NAVIGATION-SAME-WINDOW"
                 } else if (navigationTestLoading) {
                     navigationTestLoading = false
                     navigationStatus.text = "GV-NAVIGATION-TEST-READY"
@@ -1137,7 +1114,7 @@ private object PrototypeLoopbackServer {
         return true
     }
 
-    private fun page(slot: String) = """<!doctype html><meta charset=utf-8><body style="padding-top:160px"><a style="position:fixed;top:0;left:0;width:100%;height:140px" href="${prototypeFixtureUri(slot)}#$slot-history" target="_blank">Open allowed fixture window</a><h1>Issue 6 synthetic slot $slot</h1><pre id=o>GV6|loading</pre><script>
+    private fun page(slot: String) = """<!doctype html><meta charset=utf-8><body style="padding-top:300px"><a style="position:fixed;top:0;left:0;width:100%;height:140px" href="${prototypeFixtureUri(slot)}#$slot-history" target="_blank">Open allowed fixture window</a><a style="position:fixed;top:140px;left:0;width:100%;height:140px" href="https://example.invalid/issue-7-redacted-test" target="_blank">Open blocked fixture window</a><h1>Issue 6 synthetic slot $slot</h1><pre id=o>GV6|loading</pre><script>
 const s='$slot'; if(!document.cookie.includes('gv6='))document.cookie='gv6='+s+'; SameSite=Strict';
 if(!localStorage.gv6)localStorage.gv6=s;
 const expected=s+'-history';if(!history.state?.gv6)history.replaceState({gv6:expected},'',location.pathname+'#'+expected);const n=history.state?.gv6||'missing';

@@ -104,6 +104,11 @@ authentication, trade, payment, cookie/token, QR, or Steam Guard content was cap
 
 ## Human proof still required
 
+The current debug prototype is single-window: approved new-window links are routed
+into the existing selected GeckoSession with the navigation policy checked again.
+This machine preparation does not prove authentication flows that depend on
+`window.opener`, `postMessage`, or `window.close`; those semantics remain human-gate work.
+
 The following are deliberately **NOT RUN** and cannot be inferred from this receipt:
 
 - Steam authentication or Steam Guard on the emulator;
