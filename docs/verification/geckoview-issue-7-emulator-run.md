@@ -87,7 +87,7 @@ measurement is not a release, battery, or physical-device performance claim.
 ## Reviewable evidence
 
 - `evidence/issue-7/gv7-emulator-router-ready.png` — SHA-256
-  `6299619534D38EABC1DE638BC2F9AB2637764A118D1B2B6F6F8F916E728A5231`
+  `930AD08E2FB9190D47AB042F100EEEE231E20E0A27E8A06AED56376637D1D585`
 - `evidence/issue-7/gv7-emulator-router-ready.xml` — SHA-256
   `0EE5BEF0EAA365BA799A62CC71FD5F7B52C1B826C39CFC756229FCDBBDB3E9CB`
 - `evidence/issue-7/gv7-emulator-navigation-blocked.png` — SHA-256
