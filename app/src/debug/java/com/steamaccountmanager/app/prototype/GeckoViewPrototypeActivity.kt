@@ -249,15 +249,15 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         session.loadUri("http://127.0.0.1:$LOOPBACK_PORT/slot/$slot")
     }
 
-    private fun installMarkerExtension() {
+    private fun installMarkerExtension(update: Boolean = false) {
         // Mozilla requires geckoViewAddons for background-script native messaging;
         // this privilege exists only in the non-shipping acceptance fixture.
-        runtime.webExtensionController.ensureBuiltIn(
-            "resource://android/assets/issue6-marker/",
-            MARKER_EXTENSION_ID,
-        ).accept(
+        val uri = "resource://android/assets/issue6-marker/"
+        val result = if (update) runtime.webExtensionController.installBuiltIn(uri)
+        else runtime.webExtensionController.ensureBuiltIn(uri, MARKER_EXTENSION_ID)
+        result.accept(
             { extension -> runOnUiThread {
-                if (extension?.id != MARKER_EXTENSION_ID) {
+                if (extension?.id != MARKER_EXTENSION_ID || extension.metaData.version != MARKER_VERSION) {
                     markerMutationInFlight = false
                     markerStatus.text = "GV-MARKER-INSTALL-FAILED"
                     return@runOnUiThread
@@ -280,6 +280,10 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 val exact = extensions.orEmpty().singleOrNull { it.id == MARKER_EXTENSION_ID }
                 if (exact == null) {
                     markerExtensionState.text = "GV-MARKER-STATE-ABSENT slot=$slot profile=$profileId"
+                } else if (exact.metaData.version != MARKER_VERSION) {
+                    installMarkerExtension(update = true)
+                } else if (exact.metaData.enabled) {
+                    restartMarkerBackground(exact)
                 } else {
                     markerExtension = exact
                     exact.setMessageDelegate(markerMessageDelegate, MARKER_NATIVE_APP)
@@ -289,6 +293,35 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             { runOnUiThread {
                 markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
             } },
+        )
+    }
+
+    private fun restartMarkerBackground(extension: WebExtension) {
+        markerMutationInFlight = true
+        markerExtension = extension
+        val failed = { _: Throwable? -> runOnUiThread {
+            markerMutationInFlight = false
+            markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
+        } }
+        runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.APP).accept(
+            { disabled ->
+                if (disabled == null) failed(null) else {
+                    disabled.setMessageDelegate(markerMessageDelegate, MARKER_NATIVE_APP)
+                    runtime.webExtensionController.enable(disabled, WebExtensionController.EnableSource.APP).accept(
+                        { enabled -> runOnUiThread {
+                            if (enabled?.id != MARKER_EXTENSION_ID || enabled.metaData.version != MARKER_VERSION) {
+                                failed(null)
+                            } else {
+                                markerExtension = enabled
+                                enabled.setMessageDelegate(markerMessageDelegate, MARKER_NATIVE_APP)
+                                refreshMarkerState()
+                            }
+                        } },
+                        failed,
+                    )
+                }
+            },
+            failed,
         )
     }
 
@@ -304,8 +337,10 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 }
                 markerExtensionState.text = when {
                     exact == null -> "GV-MARKER-STATE-ABSENT slot=$slot profile=$profileId"
-                    exact.metaData.enabled -> "GV-MARKER-STATE-ENABLED slot=$slot profile=$profileId"
-                    else -> "GV-MARKER-STATE-DISABLED slot=$slot profile=$profileId"
+                    exact.metaData.enabled -> "GV-MARKER-STATE-ENABLED slot=$slot profile=$profileId " +
+                        "version=${exact.metaData.version}"
+                    else -> "GV-MARKER-STATE-DISABLED slot=$slot profile=$profileId " +
+                        "version=${exact.metaData.version}"
                 }
                 markerMutationInFlight = false
                 after?.invoke()
@@ -851,6 +886,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         const val CSFLOAT_XPI_URL =
             "https://addons.mozilla.org/firefox/downloads/file/4957680/csgofloat-5.17.0.xpi"
         const val CSFLOAT_NAME = "CSFloat Market Checker"
+        const val MARKER_VERSION = "1.5"
         const val ARTIFACT_METADATA =
             "GeckoView 153.0.20260810162159\n" +
                 "CSFloat Market Checker 5.17.0\n" +

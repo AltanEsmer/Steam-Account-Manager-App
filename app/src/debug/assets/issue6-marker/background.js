@@ -5,8 +5,19 @@ function connect() {
     const port = browser.runtime.connectNative("issue6Marker");
     let disconnected = false;
     let receivedRead = false;
+    let retryScheduled = false;
+    const retry = () => {
+      if (!retryScheduled) {
+        retryScheduled = true;
+        setTimeout(connect, 2000);
+      }
+    };
     const watchdog = setTimeout(() => {
-      if (!disconnected && !receivedRead) port.disconnect();
+      if (!disconnected && !receivedRead) {
+        disconnected = true;
+        retry();
+        port.disconnect();
+      }
     }, 2000);
     port.onMessage.addListener(async message => {
       if (!message || message.type !== "read" || !["A", "B"].includes(message.slot)) return;
@@ -20,7 +31,7 @@ function connect() {
     });
     port.onDisconnect.addListener(() => {
       disconnected = true;
-      setTimeout(connect, 2000);
+      retry();
     });
   } catch (_) {
     setTimeout(connect, 2000);
