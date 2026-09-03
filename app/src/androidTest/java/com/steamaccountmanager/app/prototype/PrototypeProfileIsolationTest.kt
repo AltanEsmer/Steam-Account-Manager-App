@@ -20,6 +20,27 @@ class PrototypeProfileIsolationTest {
     private val context = instrumentation.targetContext
 
     @Test
+    fun navigationGateExposesControlsAndBlocksWithoutAutomaticHandoff() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Open synthetic slot A")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
+
+        awaitText("Back")
+        awaitText("Forward")
+        awaitText("Reload")
+        click("Test allowed navigation")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
+        click("Test blocked navigation")
+        awaitText("GV-NAVIGATION-BLOCKED: Destination blocked. Stay here or open it in your external browser.")
+        awaitText("Stay here")
+        awaitText("Open in external browser")
+    }
+
+    @Test
     fun routerRecreationDuringPendingSwitchFinishesCleanupWithoutStaleAuthorization() {
         val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
         context.startActivity(

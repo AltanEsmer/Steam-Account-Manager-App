@@ -7,6 +7,31 @@ import org.junit.Test
 
 class PrototypeContractTest {
     @Test
+    fun `navigation gate allows only exact fixture and secure Steam destinations`() {
+        assertTrue(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/A", "A"))
+        assertTrue(isPrototypeNavigationAllowed("https://steamcommunity.com/openid/login", "A"))
+        assertTrue(isPrototypeNavigationAllowed("https://login.steampowered.com/jwt/finalizelogin", "A"))
+        assertTrue(isPrototypeNavigationAllowed("https://store.steampowered.com/login/", "A"))
+        assertTrue(isPrototypeNavigationAllowed("https://help.steampowered.com/en/wizard/HelpWithLogin", "A"))
+
+        assertFalse(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/B", "A"))
+        assertFalse(isPrototypeNavigationAllowed("https://steamcommunity.com.evil.invalid/", "A"))
+        assertFalse(isPrototypeNavigationAllowed("https://example.invalid/secret?token=hidden#fragment", "A"))
+        assertFalse(isPrototypeNavigationAllowed("http://steamcommunity.com/", "A"))
+        assertFalse(isPrototypeNavigationAllowed("intent://steamcommunity.com/", "A"))
+    }
+
+    @Test
+    fun `blocked navigation state is fixed and redacted`() {
+        assertEquals(
+            "GV-NAVIGATION-BLOCKED: Destination blocked. Stay here or open it in your external browser.",
+            PROTOTYPE_NAVIGATION_BLOCKED_MESSAGE,
+        )
+        assertFalse(PROTOTYPE_NAVIGATION_BLOCKED_MESSAGE.contains("example.invalid"))
+        assertFalse(PROTOTYPE_NAVIGATION_BLOCKED_MESSAGE.contains("token="))
+    }
+
+    @Test
     fun `consent identity must match the exact CSFloat package`() {
         assertTrue(isExpectedCsfloat(CSFLOAT_ID, CSFLOAT_VERSION))
         assertFalse(isExpectedCsfloat("unexpected@example.invalid", CSFLOAT_VERSION))
