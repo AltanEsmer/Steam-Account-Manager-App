@@ -61,6 +61,7 @@ class PrototypeProfileIsolationTest {
         click("Open synthetic slot A")
         awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
         ensureMarkerEnabled("A")
+        awaitText("version=1.5", 30_000)
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
 
         repeat(4) {
@@ -157,6 +158,7 @@ class PrototypeProfileIsolationTest {
         click("Open synthetic slot A")
         awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
         ensureMarkerEnabled("A")
+        awaitText("version=1.5", 30_000)
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
         awaitText("GV-MARKER-STATE-ENABLED slot=A")
 
@@ -170,6 +172,7 @@ class PrototypeProfileIsolationTest {
         backToRouter()
         click("Reopen selected slot")
         awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
+        awaitText("version=1.5", 30_000)
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
 
         click("Disable issue6 marker")
