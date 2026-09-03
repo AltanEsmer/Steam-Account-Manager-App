@@ -2,6 +2,8 @@ package com.steamaccountmanager.app.prototype
 
 import android.app.AlertDialog
 import android.app.Dialog
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -12,6 +14,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import com.steamaccountmanager.app.browser.WebsitePolicy
+import com.steamaccountmanager.app.domain.model.BuiltInWebsites
+import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
@@ -24,6 +29,7 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.net.InetAddress
+import java.net.URI
 import java.net.ServerSocket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.Executors
@@ -42,6 +48,9 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private lateinit var engineStatus: TextView
     private lateinit var extensionState: TextView
     private lateinit var markerExtensionState: TextView
+    private lateinit var navigationStatus: TextView
+    private lateinit var stayButton: Button
+    private lateinit var openExternalButton: Button
     private lateinit var slot: String
     private lateinit var profileId: String
     private var installDenied = false
@@ -59,6 +68,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private var markerPort: WebExtension.Port? = null
     private var markerMutationInFlight = false
     private var csfloatMutationInFlight = false
+    private var blockedExternalUri: Uri? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -124,6 +134,24 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             text = "GV-MARKER-STATE-UNKNOWN slot=$slot profile=$profileId"
             setPadding(24, 8, 24, 8)
         }
+        navigationStatus = TextView(this).apply {
+            visibility = TextView.GONE
+            setPadding(24, 8, 24, 8)
+        }
+        openExternalButton = Button(this).apply {
+            text = "Open in external browser"
+            visibility = Button.GONE
+            setOnClickListener {
+                blockedExternalUri?.let { uri ->
+                    startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
+                }
+            }
+        }
+        stayButton = Button(this).apply {
+            text = "Stay here"
+            visibility = Button.GONE
+            setOnClickListener { clearBlockedNavigation() }
+        }
         val metadata = TextView(this).apply {
             text = ARTIFACT_METADATA
             setPadding(24, 8, 24, 12)
@@ -133,6 +161,14 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         val controls = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(status)
+                addView(button("Back") { session.goBack() })
+                addView(button("Forward") { session.goForward() })
+                addView(button("Reload") { session.reload() })
+                addView(button("Test allowed navigation") { loadSyntheticMarker() })
+                addView(button("Test blocked navigation") { session.loadUri(BLOCKED_TEST_URL) })
+                addView(navigationStatus)
+                addView(stayButton)
+                addView(openExternalButton)
                 addView(markerStatus)
                 addView(engineStatus)
                 addView(installButton)
@@ -198,6 +234,16 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         }
         runtime.webExtensionController.promptDelegate = InstallConsentPrompt()
         session = GeckoSession().apply {
+            navigationDelegate = object : GeckoSession.NavigationDelegate {
+                override fun onLoadRequest(
+                    session: GeckoSession,
+                    request: GeckoSession.NavigationDelegate.LoadRequest,
+                ): GeckoResult<AllowOrDeny> {
+                    val allowed = isPrototypeNavigationAllowed(request.uri, slot)
+                    if (!allowed) runOnUiThread { showBlockedNavigation(request.uri) }
+                    return GeckoResult.fromValue(if (allowed) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
+                }
+            }
             progressDelegate = object : GeckoSession.ProgressDelegate {
                 override fun onPageStop(session: GeckoSession, success: Boolean) {
                     if (!success) runOnUiThread {
@@ -247,6 +293,21 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
 
     private fun loadSyntheticMarker() {
         session.loadUri("http://127.0.0.1:$LOOPBACK_PORT/slot/$slot")
+    }
+
+    private fun showBlockedNavigation(rawUri: String) {
+        navigationStatus.text = PROTOTYPE_NAVIGATION_BLOCKED_MESSAGE
+        navigationStatus.visibility = TextView.VISIBLE
+        stayButton.visibility = Button.VISIBLE
+        blockedExternalUri = Uri.parse(rawUri).takeIf { it.scheme == "http" || it.scheme == "https" }
+        openExternalButton.visibility = if (blockedExternalUri == null) Button.GONE else Button.VISIBLE
+    }
+
+    private fun clearBlockedNavigation() {
+        blockedExternalUri = null
+        navigationStatus.visibility = TextView.GONE
+        stayButton.visibility = Button.GONE
+        openExternalButton.visibility = Button.GONE
     }
 
     private fun installMarkerExtension(update: Boolean = false) {
@@ -883,6 +944,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
 
         const val STEAM_LISTING_URL =
             "https://steamcommunity.com/market/listings/730/AK-47%20%7C%20Redline%20%28Field-Tested%29"
+        const val BLOCKED_TEST_URL = "https://example.invalid/issue-7-redacted-test"
         const val CSFLOAT_XPI_URL =
             "https://addons.mozilla.org/firefox/downloads/file/4957680/csgofloat-5.17.0.xpi"
         const val CSFLOAT_NAME = "CSFloat Market Checker"
@@ -896,6 +958,22 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 "SHA-256: 70C540B8B1DF125596EF615FE37028542DE4D92B3816AD81EB6AD5CE3D11798D\n" +
                 "Signature is validated by GeckoView during install; observed signed state appears after success."
     }
+}
+
+const val PROTOTYPE_NAVIGATION_BLOCKED_MESSAGE =
+    "GV-NAVIGATION-BLOCKED: Destination blocked. Stay here or open it in your external browser."
+
+fun isPrototypeNavigationAllowed(rawUri: String, slot: String): Boolean {
+    val fixture = "http://127.0.0.1:$LOOPBACK_PORT/slot/$slot"
+    if (rawUri == fixture) return true
+    val uri = try {
+        URI(rawUri)
+    } catch (_: Exception) {
+        return false
+    }
+    if (!uri.scheme.equals("https", ignoreCase = true) || uri.userInfo != null) return false
+    val steam = BuiltInWebsites.STEAM
+    return WebsitePolicy(steam.domain, steam.allowedAuthDomains).isHostAllowed(uri.host)
 }
 
 private object PrototypeLoopbackServer {
