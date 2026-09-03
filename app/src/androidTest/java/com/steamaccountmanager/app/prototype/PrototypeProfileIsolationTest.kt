@@ -45,7 +45,9 @@ class PrototypeProfileIsolationTest {
         }
         backToRouter()
         click("Stop worker process")
-        awaitText("GV-WORKER-STOPPED", 30_000)
+        if (awaitAny("GV-WORKER-STOPPED", "GV-WORKER-STOP-TIMEOUT") == 1) {
+            throw AssertionError("Worker stop timed out with ${appChildProcesses()}")
+        }
         awaitNoAppChildProcesses(10_000)
     }
 
@@ -74,7 +76,9 @@ class PrototypeProfileIsolationTest {
 
         backToRouter()
         click("Stop worker process")
-        awaitText("GV-WORKER-STOPPED", 30_000)
+        if (awaitAny("GV-WORKER-STOPPED", "GV-WORKER-STOP-TIMEOUT") == 1) {
+            throw AssertionError("Worker stop timed out with ${appChildProcesses()}")
+        }
         awaitNoAppChildProcesses(10_000)
     }
 
@@ -214,9 +218,14 @@ class PrototypeProfileIsolationTest {
     }
 
     private fun appChildProcessRunning(): Boolean {
+        return appChildProcesses().isNotEmpty()
+    }
+
+    private fun appChildProcesses(): List<String> {
         val prefix = "${context.packageName}:"
         return (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
-            .runningAppProcesses.orEmpty().any { it.processName.startsWith(prefix) }
+            .runningAppProcesses.orEmpty().filter { it.processName.startsWith(prefix) }
+            .map { "${it.pid}:${it.processName}" }
     }
 
     private fun awaitNoAppChildProcesses(timeoutMs: Long) {

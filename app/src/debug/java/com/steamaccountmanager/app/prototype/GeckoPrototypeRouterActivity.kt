@@ -102,33 +102,63 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
         stopped: (Long) -> Unit,
     ) {
         val cleanupAlreadyPending = processCleanupPending
-        processCleanupPending = true
-        cleanupProcessIds += appChildProcesses().map { it.pid }
+        if (!cleanupAlreadyPending) {
+            processCleanupPending = true
+            cleanupId++
+            cleanupDeadline = System.currentTimeMillis() + 8_000
+            cleanupProcesses = emptyMap()
+            cleanupSnapshotTaken = false
+            cleanupWorkerMissingPolls = 0
+        }
+        val requestedCleanupId = cleanupId
         render("$waitCode generation=$requestedGeneration")
         if (!cleanupAlreadyPending) {
             sendBroadcast(Intent(this, PrototypeWorkerShutdownReceiver::class.java).setAction(ACTION_SHUTDOWN).apply {
                 putExtra(EXTRA_GENERATION, requestedGeneration)
             })
         }
-        val deadline = System.currentTimeMillis() + 8_000
         var emptyPolls = 0
         fun poll() {
             val canComplete = !destroyed && isCurrent()
             if (!canComplete && !destroyed) return
+            if (requestedCleanupId != cleanupId) return
+            if (!processCleanupPending) {
+                if (cleanupSucceeded && canComplete) stopped(requestedGeneration)
+                else if (canComplete && switches.timedOut(requestedGeneration)) {
+                    render("$timeoutCode generation=$requestedGeneration")
+                }
+                return
+            }
             val runningProcesses = appChildProcesses()
-            cleanupProcessIds += runningProcesses.map { it.pid }
-            terminateAppChildProcesses()
-            val cleanupComplete = runningProcesses.isEmpty() &&
-                cleanupProcessIds.none { File("/proc/$it").exists() }
+            if (!cleanupSnapshotTaken && runningProcesses.none { it.processName == "$packageName:gecko_prototype" }) {
+                cleanupWorkerMissingPolls++
+                if (cleanupWorkerMissingPolls >= 3) {
+                    cleanupProcesses = runningProcesses.associate { it.pid to it.processName }
+                    cleanupSnapshotTaken = true
+                }
+            } else if (!cleanupSnapshotTaken) cleanupWorkerMissingPolls = 0
+            if (!cleanupSnapshotTaken) {
+                if (System.currentTimeMillis() >= cleanupDeadline) {
+                    finishCleanup(requestedCleanupId, false)
+                    if (canComplete && switches.timedOut(requestedGeneration)) {
+                        render("$timeoutCode generation=$requestedGeneration")
+                    }
+                } else handler.postDelayed(::poll, 200)
+                return
+            }
+            terminateOwnedChildProcesses(runningProcesses)
+            val cleanupComplete = runningProcesses.isEmpty() && cleanupProcesses.keys.none { pid ->
+                File("/proc/$pid").exists()
+            }
             if (cleanupComplete) {
                 emptyPolls++
                 if (emptyPolls < 3) handler.postDelayed(::poll, 200)
                 else {
-                    cleanupProcessIds.clear()
-                    processCleanupPending = false
+                    finishCleanup(requestedCleanupId, true)
                     if (canComplete) stopped(requestedGeneration)
                 }
-            } else if (System.currentTimeMillis() >= deadline) {
+            } else if (System.currentTimeMillis() >= cleanupDeadline) {
+                finishCleanup(requestedCleanupId, false)
                 if (canComplete && switches.timedOut(requestedGeneration)) {
                     render("$timeoutCode generation=$requestedGeneration")
                 }
@@ -166,11 +196,23 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             .filter { it.processName.startsWith(prefix) }
     }
 
-    private fun terminateAppChildProcesses() {
+    private fun terminateOwnedChildProcesses(processes: List<ActivityManager.RunningAppProcessInfo>) {
         val worker = "${packageName}:gecko_prototype"
-        appChildProcesses()
-            .filter { process -> process.processName != worker }
+        processes
+            .filter { process ->
+                process.processName != worker && cleanupProcesses[process.pid] == process.processName
+            }
             .forEach { Process.killProcess(it.pid) }
+    }
+
+    private fun finishCleanup(requestedCleanupId: Long, succeeded: Boolean) {
+        if (processCleanupPending && cleanupId == requestedCleanupId) {
+            processCleanupPending = false
+            cleanupSucceeded = succeeded
+            cleanupProcesses = emptyMap()
+            cleanupSnapshotTaken = false
+            cleanupWorkerMissingPolls = 0
+        }
     }
 
     private fun render(code: String) {
@@ -179,7 +221,12 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
 
     companion object {
         @Volatile private var processCleanupPending = false
-        private val cleanupProcessIds = mutableSetOf<Int>()
+        private var cleanupId = 0L
+        private var cleanupDeadline = 0L
+        private var cleanupSucceeded = false
+        private var cleanupProcesses = emptyMap<Int, String>()
+        private var cleanupSnapshotTaken = false
+        private var cleanupWorkerMissingPolls = 0
     }
 }
 
