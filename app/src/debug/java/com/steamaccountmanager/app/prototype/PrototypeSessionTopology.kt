@@ -39,7 +39,7 @@ class ProfileSwitchCoordinator(initialProfileId: String?) {
         private set
 
     fun request(profileId: String): ProfileSwitchRequest {
-        if (profileId == activeProfileId && pendingProfileId == null) {
+        if (profileId == activeProfileId && pendingGeneration == null) {
             return ProfileSwitchRequest(nextGeneration - 1, false, profileId)
         }
         val generation = nextGeneration++
@@ -49,17 +49,29 @@ class ProfileSwitchCoordinator(initialProfileId: String?) {
         return ProfileSwitchRequest(generation, true, null)
     }
 
+    fun stop(): ProfileSwitchRequest {
+        val generation = nextGeneration++
+        pendingProfileId = null
+        pendingGeneration = generation
+        failureCode = null
+        return ProfileSwitchRequest(generation, true, null)
+    }
+
     fun processDeathObserved(generation: Long): String? {
-        if (generation != pendingGeneration) return null
         val authorized = pendingProfileId ?: return null
-        activeProfileId = authorized
+        return authorized.takeIf { processDeathObserved(generation, authorized) }
+    }
+
+    fun processDeathObserved(generation: Long, expectedProfileId: String?): Boolean {
+        if (generation != pendingGeneration || expectedProfileId != pendingProfileId) return false
+        expectedProfileId?.let { activeProfileId = it }
         pendingProfileId = null
         pendingGeneration = null
         failureCode = null
-        return authorized
+        return true
     }
 
-    fun isPending(generation: Long, profileId: String): Boolean =
+    fun isPending(generation: Long, profileId: String?): Boolean =
         generation == pendingGeneration && profileId == pendingProfileId
 
     fun timedOut(generation: Long): Boolean {

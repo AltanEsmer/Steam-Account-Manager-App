@@ -162,6 +162,11 @@ class PrototypeProfileIsolationTest {
 
     private fun ensureMarkerEnabled(slot: String) {
         when (awaitAny("GV-MARKER-STATE-ENABLED slot=$slot", "GV-MARKER-STATE-DISABLED slot=$slot", "GV-MARKER-STATE-ABSENT slot=$slot")) {
+            0 -> {
+                click("Disable issue6 marker")
+                awaitText("GV-MARKER-STATE-DISABLED slot=$slot", 30_000)
+                click("Enable issue6 marker")
+            }
             1 -> click("Enable issue6 marker")
             2 -> click("Reinstall issue6 marker (synthetic only)")
         }

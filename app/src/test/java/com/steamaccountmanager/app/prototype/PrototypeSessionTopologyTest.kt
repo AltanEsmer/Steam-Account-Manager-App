@@ -114,6 +114,17 @@ class PrototypeSessionTopologyTest {
     }
 
     @Test
+    fun `destroyed coordinator cannot complete pending profile launch`() {
+        val switches = ProfileSwitchCoordinator("gv_a")
+        val pendingB = switches.request("gv_b")
+
+        switches.invalidate()
+
+        assertFalse(switches.isPending(pendingB.generation, "gv_b"))
+        assertEquals(null, switches.processDeathObserved(pendingB.generation))
+    }
+
+    @Test
     fun `switch timeout fails closed and generations remain monotonic`() {
         val switches = ProfileSwitchCoordinator("gv_a")
         val first = switches.request("gv_b")

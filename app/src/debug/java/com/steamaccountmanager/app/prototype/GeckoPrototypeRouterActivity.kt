@@ -30,7 +30,6 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
     private lateinit var status: TextView
     private lateinit var switches: ProfileSwitchCoordinator
     private var selectedSlot: String? = null
-    private var stopGeneration = 0L
     private var destroyed = false
     private val handler = Handler(Looper.getMainLooper())
 
@@ -47,13 +46,17 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             addView(button("Reopen selected slot") { selectedSlot?.let(::select) })
             addView(button("Recreate router activity") { recreate() })
             addView(button("Stop worker process") {
-                val requestedGeneration = ++stopGeneration
+                val request = switches.stop()
                 stopWorker(
                     "GV-WORKER-STOP-WAIT",
                     "GV-WORKER-STOP-TIMEOUT",
-                    requestedGeneration,
-                    { requestedGeneration == stopGeneration },
-                ) { stoppedGeneration -> render("GV-WORKER-STOPPED generation=$stoppedGeneration") }
+                    request.generation,
+                    { switches.isPending(request.generation, null) },
+                ) { stoppedGeneration ->
+                    if (switches.processDeathObserved(stoppedGeneration, null)) {
+                        render("GV-WORKER-STOPPED generation=$stoppedGeneration")
+                    }
+                }
             })
         })
         render("GV-ROUTER-READY")
@@ -65,7 +68,6 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
     }
 
     private fun select(slot: String) {
-        stopGeneration++
         val profileId = slotProfileId(slot)
         val request = switches.request(profileId)
         if (!request.requiresProcessRestart) {
@@ -73,7 +75,7 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             return
         }
         if (!workerRunning()) {
-            if (switches.processDeathObserved(request.generation) == profileId) authorize(slot)
+            if (switches.processDeathObserved(request.generation, profileId)) authorize(slot)
             return
         }
         stopWorker(
@@ -82,7 +84,7 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             request.generation,
             { switches.isPending(request.generation, profileId) },
         ) { stoppedGeneration ->
-            if (switches.processDeathObserved(stoppedGeneration) == profileId) authorize(slot)
+            if (switches.processDeathObserved(stoppedGeneration, profileId)) authorize(slot)
         }
     }
 
@@ -103,9 +105,7 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             terminateAppChildProcesses()
             if (!workerRunning()) stopped(requestedGeneration)
             else if (System.currentTimeMillis() >= deadline) {
-                if (timeoutCode == "GV-PROFILE-SWITCH-TIMEOUT") {
-                    if (switches.timedOut(requestedGeneration)) render("$timeoutCode generation=$requestedGeneration")
-                } else render("$timeoutCode generation=$requestedGeneration")
+                if (switches.timedOut(requestedGeneration)) render("$timeoutCode generation=$requestedGeneration")
             } else handler.postDelayed(::poll, 200)
         }
         handler.postDelayed(::poll, 200)
@@ -113,7 +113,6 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
 
     override fun onDestroy() {
         destroyed = true
-        stopGeneration++
         switches.invalidate()
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
