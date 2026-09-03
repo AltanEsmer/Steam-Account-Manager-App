@@ -1,6 +1,41 @@
 # Issue #7 emulator verification receipt
 
-Status: **PARTIAL PASS — credential-free emulator scope only**
+Status: **INCOMPLETE / STAGNATED — latest machine resume failed repeatability**
+
+## Latest resume (2026-09-03)
+
+Current source checkpoint: `1dc8802bc91e3f232580c607b5b114d36f12113e`.
+The primary's first full instrumentation run passed 16/16; its repeat passed only
+14/16, with initial engine-load and synthetic extension-marker failures. A single
+passing run is not current acceptance evidence. Issue #7 has no `GO`; production
+issue #8 and subsequent migration work remain blocked.
+
+Narrowed diagnostics on that source reproduced a later reinstall stall: installation
+reported enabled 1.5, but the synthetic background had no `script-enter` phase and
+the marker remained waiting. Earlier worker restarts did enter the background and
+return results. This narrows the symptom, but does not establish a safe permanent
+fix. Temporary diagnostic probes and console logging were removed.
+
+A subsequent uncommitted experiment restarted the background after install, removed
+the redundant post-enable install, and strengthened the enabled-state test wait.
+Its instrumented narrow run passed once, but diagnostics-free validation failed in
+116.596 seconds: after A's uninstall and an A→B→A switch, A was enabled when absence
+was required (test line 245 in the experimental source). The experiment was rejected
+and its three changes removed; source is restored to the checkpoint above. This is
+not a passing current-head receipt or permission to proceed with device testing.
+
+Safe local diagnostic artifacts (not committed full logs):
+
+- Original narrowed result: `C:\Users\esmer\AppData\Local\Temp\gv7-marker-js-diag-result.log`
+- Fixed-phase background evidence: `C:\Users\esmer\AppData\Local\Temp\gv7-marker-js-diag-phases.log`
+- Instrumented experiment: `C:\Users\esmer\AppData\Local\Temp\gv7-marker-install-only-probe-result.log`
+- Failed diagnostics-free experiment: `C:\Users\esmer\AppData\Local\Temp\gv7-marker-clean-candidate-result.log`
+
+All runs used dedicated `emulator-5580`; no physical-device proof was collected.
+The historical receipt below describes `b81eeab` only. Its APK, test counts, and
+screenshots are historical evidence, not current authorization to run that APK.
+
+## Historical b81eeab receipt — partial emulator pass only
 
 This receipt records the autonomous emulator portion of the issue #7 compatibility
 gate. It does not record an official `GO`. Steam authentication, authenticated CSFloat

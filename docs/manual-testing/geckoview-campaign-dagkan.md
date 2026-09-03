@@ -1,5 +1,27 @@
 # GeckoView campaign manual testing for Dagkan
 
+## Current status: INCOMPLETE / STAGNATED — do not run the old APK
+
+Machine validation at source `1dc8802bc91e3f232580c607b5b114d36f12113e` is not
+repeatable: the primary's full run passed 16/16 once, then only 14/16 with engine-load
+and synthetic marker failures. Narrowing found no background entry after reinstall;
+a diagnostics-free experimental repair then failed uninstall persistence in
+116.596 seconds and was removed. See the [latest receipt](../verification/geckoview-issue-7-emulator-run.md)
+for source attribution and safe local logs. No `GO` exists and production issue #8
+remains blocked.
+
+Do not install or test the historical `b81eeab` APK below now. The retained procedure
+and metadata are historical preparation, not authorization or a current passing
+build. Resume only after Codex supplies a newly verified exact build and explicitly
+reopens the device gate; all acceptance criteria below remain required.
+
+Codex gathers the emulator, build, APK-hash, automated-test, and safe technical
+screenshot/log evidence. When the device gate is reopened, the user supplies only
+the prescribed device-only observed PASS/FAIL results, device model/Android version,
+and reauthentication notes. Do not send credentials, cookies, tokens, account
+identifiers, trade/payment content, or authenticated screenshots. Missing evidence
+remains incomplete rather than being inferred from emulator results.
+
 This is the living human-test guide for the GeckoView migration campaign. Run only
 the gate whose APK metadata is complete. A gate passes only when every required
 expected result is observed. Mark an unexpected or missing result `FAIL`; do not
@@ -14,7 +36,7 @@ inside GeckoView. Browser state and extension state are stored separately for te
 slots A and B, and only the selected slot's browser process remains active. This is
 the final compatibility check before any production browser migration may begin.
 
-## Before you start
+## Historical prerequisites — blocked pending a newly verified build
 
 - Test exact source commit `b81eeab10ee0554850f51ff9702052ce96ddba19`.
 - Use `C:\Users\esmer\AppData\Local\Temp\sam-gv7-navigation-repair-b81eeab\app-debug-4A5FF6D7.apk`.
