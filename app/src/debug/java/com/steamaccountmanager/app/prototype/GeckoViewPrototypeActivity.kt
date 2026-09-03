@@ -149,7 +149,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 addView(button("Disable CSFloat") { changeCsfloat("disable") })
                 addView(button("Enable CSFloat") { changeCsfloat("enable") })
                 addView(button("Uninstall CSFloat") { changeCsfloat("uninstall") })
-                addView(button("Reinstall CSFloat with consent") { installExtension() })
+                addView(button("Reinstall CSFloat with consent") { reinstallExtension() })
                 addView(markerExtensionState)
                 addView(button("Disable issue6 marker") { changeMarker("disable") })
                 addView(button("Enable issue6 marker") { changeMarker("enable") })
@@ -207,7 +207,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             }
             contentDelegate = object : GeckoSession.ContentDelegate {
                 override fun onTitleChange(session: GeckoSession, title: String?) {
-                    if (title?.matches(Regex("^GV6\\|slot=[AB]\\|cookie=[AB]\\|local=[AB]\\|idb=[AB]\\|nav=[AB]$")) == true) {
+                    if (title?.matches(Regex("^GV6\\|slot=[AB]\\|cookie=[AB]\\|local=[AB]\\|idb=[AB]\\|nav=[AB]-history$")) == true) {
                         runOnUiThread { engineStatus.text = title }
                     }
                 }
@@ -414,16 +414,22 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         csfloatMutationInFlight = true
         runtime.webExtensionController.list().accept(
             { extensions -> runOnUiThread {
-                val exact = extensions.orEmpty().singleOrNull { isExpectedCsfloat(it.id, it.metaData.version) }
-                if (exact == null) {
-                    extensionState.text = "GV-CSFLOAT-STATE-ABSENT slot=$slot"
+                val target = extensions.orEmpty().singleOrNull {
+                    if (operation == "enable") isExpectedCsfloat(it.id, it.metaData.version)
+                    else isCsfloatRevocationTarget(it.id)
+                }
+                if (target == null) {
+                    extensionState.text = if (operation == "enable" && extensions.orEmpty().any {
+                            isCsfloatRevocationTarget(it.id)
+                        }
+                    ) "GV-CSFLOAT-STATE-FAILED" else "GV-CSFLOAT-STATE-ABSENT slot=$slot"
                     revokeOfficialAction()
                     csfloatMutationInFlight = false
                 } else {
                     val result = when (operation) {
-                        "disable" -> runtime.webExtensionController.disable(exact, WebExtensionController.EnableSource.APP)
-                        "enable" -> runtime.webExtensionController.enable(exact, WebExtensionController.EnableSource.APP)
-                        "uninstall" -> runtime.webExtensionController.uninstall(exact).map { exact }
+                        "disable" -> runtime.webExtensionController.disable(target, WebExtensionController.EnableSource.APP)
+                        "enable" -> runtime.webExtensionController.enable(target, WebExtensionController.EnableSource.APP)
+                        "uninstall" -> runtime.webExtensionController.uninstall(target).map { target }
                         else -> error("unreachable")
                     }
                     result.accept(
@@ -448,6 +454,49 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 revokeOfficialAction()
             } },
         )
+    }
+
+    private fun reinstallExtension() {
+        if (csfloatMutationInFlight) return
+        csfloatMutationInFlight = true
+        revokeOfficialAction()
+        runtime.webExtensionController.list().accept(
+            { extensions -> runOnUiThread {
+                if (extensions == null) return@runOnUiThread failCsfloatCleanup()
+                val installed = extensions.singleOrNull { isCsfloatRevocationTarget(it.id) }
+                if (installed == null) {
+                    csfloatMutationInFlight = false
+                    installExtension()
+                } else runtime.webExtensionController.uninstall(installed).accept(
+                    { verifyCsfloatRevokedThenInstall() },
+                    { runOnUiThread { failCsfloatCleanup() } },
+                )
+            } },
+            { runOnUiThread { failCsfloatCleanup() } },
+        )
+    }
+
+    private fun verifyCsfloatRevokedThenInstall() {
+        runtime.webExtensionController.list().accept(
+            { extensions -> runOnUiThread {
+                if (extensions == null || extensions.any {
+                        isCsfloatRevocationTarget(it.id) && it.metaData.enabled
+                    }
+                ) failCsfloatCleanup()
+                else {
+                    csfloatMutationInFlight = false
+                    installExtension()
+                }
+            } },
+            { runOnUiThread { failCsfloatCleanup() } },
+        )
+    }
+
+    private fun failCsfloatCleanup() {
+        csfloatMutationInFlight = false
+        extensionState.text = "GV-CSFLOAT-STATE-FAILED"
+        status.text = PrototypeDiagnostic.CLEANUP_FAILED.message
+        revokeOfficialAction()
     }
 
     private fun installExtension() {
@@ -859,8 +908,8 @@ private object PrototypeLoopbackServer {
 
     private fun page(slot: String) = """<!doctype html><meta charset=utf-8><body><h1>Issue 6 synthetic slot $slot</h1><pre id=o>GV6|loading</pre><script>
 const s='$slot'; if(!document.cookie.includes('gv6='))document.cookie='gv6='+s+'; SameSite=Strict';
-if(!localStorage.gv6)localStorage.gv6=s;if(!localStorage.gv6nav)localStorage.gv6nav=s;
-const n=localStorage.gv6nav;if(!history.state)history.replaceState({gv6:n},'',location.pathname+'#'+n);
+if(!localStorage.gv6)localStorage.gv6=s;
+const expected=s+'-history';if(!history.state?.gv6)history.replaceState({gv6:expected},'',location.pathname+'#'+expected);const n=history.state?.gv6||'missing';
 const q=indexedDB.open('gv6',1);q.onupgradeneeded=()=>q.result.createObjectStore('m');q.onsuccess=()=>{const d=q.result.transaction('m','readwrite').objectStore('m');const g=d.get('slot');g.onsuccess=()=>{const prior=g.result||s;if(!g.result)d.put(s,'slot');const c=(document.cookie.match(/gv6=([AB])/)||[])[1]||'missing';const l=localStorage.gv6||'missing';const text=`GV6|slot=${'$'}{s}|cookie=${'$'}{c}|local=${'$'}{l}|idb=${'$'}{prior}|nav=${'$'}{n}`;document.title=text;document.getElementById('o').textContent=text;};};
 </script></body>"""
 }

@@ -1,12 +1,13 @@
 package com.steamaccountmanager.app.prototype
 
+import com.steamaccountmanager.app.domain.model.SessionIdentifier
 import java.nio.ByteBuffer
 import java.nio.file.Path
 import java.security.MessageDigest
 
-fun geckoProfileId(account: String, website: String): String {
+fun geckoProfileId(sessionIdentifier: SessionIdentifier): String {
     val digest = MessageDigest.getInstance("SHA-256")
-    listOf(account, website).forEach { value ->
+    listOf(sessionIdentifier.accountId, sessionIdentifier.websiteId).forEach { value ->
         val bytes = value.toByteArray(Charsets.UTF_8)
         digest.update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(bytes.size).array())
         digest.update(bytes)

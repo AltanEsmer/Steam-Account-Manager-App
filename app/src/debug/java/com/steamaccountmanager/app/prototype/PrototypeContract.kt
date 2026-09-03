@@ -6,6 +6,8 @@ const val CSFLOAT_VERSION = "5.17.0"
 fun isExpectedCsfloat(id: String?, version: String?): Boolean =
     id == CSFLOAT_ID && version == CSFLOAT_VERSION
 
+fun isCsfloatRevocationTarget(id: String?): Boolean = id == CSFLOAT_ID
+
 fun installPrompt(
     name: String?,
     id: String?,

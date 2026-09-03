@@ -12,6 +12,8 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import com.steamaccountmanager.app.domain.model.SessionIdentifier
+import java.io.File
 
 internal const val EXTRA_SLOT = "prototype_slot"
 internal const val ACTION_SHUTDOWN = "com.steamaccountmanager.app.debug.PROTOTYPE_SHUTDOWN"
@@ -21,8 +23,8 @@ internal const val MARKER_EXTENSION_ID = "issue6-marker@steam-account-manager.in
 internal const val MARKER_NATIVE_APP = "issue6Marker"
 
 internal fun slotProfileId(slot: String): String = when (slot) {
-    "A" -> geckoProfileId("synthetic-account-a", "synthetic-website")
-    "B" -> geckoProfileId("synthetic-account-b", "synthetic-website")
+    "A" -> geckoProfileId(SessionIdentifier("synthetic-account-a", "synthetic-website"))
+    "B" -> geckoProfileId(SessionIdentifier("synthetic-account-b", "synthetic-website"))
     else -> error("GV-PROFILE-SLOT-INVALID")
 }
 
@@ -69,12 +71,16 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
 
     private fun select(slot: String) {
         val profileId = slotProfileId(slot)
-        val request = switches.request(profileId)
+        var request = switches.request(profileId)
+        if (processCleanupPending && !request.requiresProcessRestart) {
+            switches.stop()
+            request = switches.request(profileId)
+        }
         if (!request.requiresProcessRestart) {
             authorize(slot)
             return
         }
-        if (!workerRunning()) {
+        if (!processCleanupPending && !workerRunning()) {
             if (switches.processDeathObserved(request.generation, profileId)) authorize(slot)
             return
         }
@@ -95,22 +101,41 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
         isCurrent: () -> Boolean,
         stopped: (Long) -> Unit,
     ) {
+        val cleanupAlreadyPending = processCleanupPending
+        processCleanupPending = true
+        cleanupProcessIds += appChildProcesses().map { it.pid }
         render("$waitCode generation=$requestedGeneration")
-        sendBroadcast(Intent(this, PrototypeWorkerShutdownReceiver::class.java).setAction(ACTION_SHUTDOWN).apply {
-            putExtra(EXTRA_GENERATION, requestedGeneration)
-        })
+        if (!cleanupAlreadyPending) {
+            sendBroadcast(Intent(this, PrototypeWorkerShutdownReceiver::class.java).setAction(ACTION_SHUTDOWN).apply {
+                putExtra(EXTRA_GENERATION, requestedGeneration)
+            })
+        }
         val deadline = System.currentTimeMillis() + 8_000
+        var emptyPolls = 0
         fun poll() {
             val canComplete = !destroyed && isCurrent()
             if (!canComplete && !destroyed) return
+            val runningProcesses = appChildProcesses()
+            cleanupProcessIds += runningProcesses.map { it.pid }
             terminateAppChildProcesses()
-            if (!workerRunning()) {
-                if (canComplete) stopped(requestedGeneration)
+            val cleanupComplete = runningProcesses.isEmpty() &&
+                cleanupProcessIds.none { File("/proc/$it").exists() }
+            if (cleanupComplete) {
+                emptyPolls++
+                if (emptyPolls < 3) handler.postDelayed(::poll, 200)
+                else {
+                    cleanupProcessIds.clear()
+                    processCleanupPending = false
+                    if (canComplete) stopped(requestedGeneration)
+                }
             } else if (System.currentTimeMillis() >= deadline) {
                 if (canComplete && switches.timedOut(requestedGeneration)) {
                     render("$timeoutCode generation=$requestedGeneration")
                 }
-            } else handler.postDelayed(::poll, 200)
+            } else {
+                emptyPolls = 0
+                handler.postDelayed(::poll, 200)
+            }
         }
         handler.postDelayed(::poll, 200)
     }
@@ -132,21 +157,29 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
     }
 
     private fun workerRunning(): Boolean {
+        return appChildProcesses().isNotEmpty()
+    }
+
+    private fun appChildProcesses(): List<ActivityManager.RunningAppProcessInfo> {
         val prefix = "$packageName:"
         return (getSystemService(ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses.orEmpty()
-            .any { it.processName.startsWith(prefix) }
+            .filter { it.processName.startsWith(prefix) }
     }
 
     private fun terminateAppChildProcesses() {
-        val prefix = "$packageName:"
         val worker = "${packageName}:gecko_prototype"
-        (getSystemService(ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses.orEmpty()
-            .filter { process -> process.processName.startsWith(prefix) && process.processName != worker }
+        appChildProcesses()
+            .filter { process -> process.processName != worker }
             .forEach { Process.killProcess(it.pid) }
     }
 
     private fun render(code: String) {
         status.text = "$code\nselected=${selectedSlot ?: "none"}\nrouterPid=${android.os.Process.myPid()}"
+    }
+
+    companion object {
+        @Volatile private var processCleanupPending = false
+        private val cleanupProcessIds = mutableSetOf<Int>()
     }
 }
 
