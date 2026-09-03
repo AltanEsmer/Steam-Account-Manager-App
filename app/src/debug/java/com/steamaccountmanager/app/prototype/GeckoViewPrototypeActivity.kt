@@ -303,6 +303,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             sharedRuntime = it
             sharedProfileId = profileId
         }
+        currentActivity = this
         runtime.webExtensionController.promptDelegate = InstallConsentPrompt()
         session = GeckoSession().apply {
             configureSession(this)
@@ -326,9 +327,12 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         clearActionDelegates()
         markerPort?.disconnect()
         markerPort = null
-        markerExtension?.setMessageDelegate(null, MARKER_NATIVE_APP)
+        if (ownsRuntime()) markerExtension?.setMessageDelegate(null, MARKER_NATIVE_APP)
         markerExtension = null
-        runtime.webExtensionController.promptDelegate = null
+        if (ownsRuntime()) {
+            runtime.webExtensionController.promptDelegate = null
+            currentActivity = null
+        }
         runtime.webExtensionController.setTabActive(session, false)
         session.close()
         super.onDestroy()
@@ -337,6 +341,12 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private fun button(label: String, action: () -> Unit) = Button(this).apply {
         text = label
         setOnClickListener { action() }
+    }
+
+    private fun ownsRuntime() = currentActivity === this
+
+    private fun withCurrentActivity(action: () -> Unit) = runOnUiThread {
+        if (ownsRuntime() && !isDestroyed) action()
     }
 
     private fun loadSyntheticMarker() {
@@ -386,23 +396,24 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun installMarkerExtension(update: Boolean = false) {
+        if (!ownsRuntime()) return
         // Mozilla requires geckoViewAddons for background-script native messaging;
         // this privilege exists only in the non-shipping acceptance fixture.
         val uri = "resource://android/assets/issue6-marker/"
         val result = if (update) runtime.webExtensionController.installBuiltIn(uri)
         else runtime.webExtensionController.ensureBuiltIn(uri, MARKER_EXTENSION_ID)
         result.accept(
-            { extension -> runOnUiThread {
+            { extension -> withCurrentActivity {
                 if (extension?.id != MARKER_EXTENSION_ID || extension.metaData.version != MARKER_VERSION) {
                     markerMutationInFlight = false
                     markerStatus.text = "GV-MARKER-INSTALL-FAILED"
-                    return@runOnUiThread
+                    return@withCurrentActivity
                 }
                 markerExtension = extension
                 extension.setMessageDelegate(markerMessageDelegate, MARKER_NATIVE_APP)
                 refreshMarkerState()
             } },
-            { runOnUiThread {
+            { withCurrentActivity {
                 markerMutationInFlight = false
                 markerStatus.text = "GV-MARKER-INSTALL-FAILED"
                 markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
@@ -411,8 +422,9 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun discoverMarkerExtension() {
+        if (!ownsRuntime()) return
         runtime.webExtensionController.list().accept(
-            { extensions -> runOnUiThread {
+            { extensions -> withCurrentActivity {
                 val exact = extensions.orEmpty().singleOrNull { it.id == MARKER_EXTENSION_ID }
                 if (exact == null) {
                     markerExtensionState.text = "GV-MARKER-STATE-ABSENT slot=$slot profile=$profileId"
@@ -426,25 +438,26 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                     refreshMarkerState()
                 }
             } },
-            { runOnUiThread {
+            { withCurrentActivity {
                 markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
             } },
         )
     }
 
     private fun restartMarkerBackground(extension: WebExtension) {
+        if (!ownsRuntime()) return
         markerMutationInFlight = true
         markerExtension = extension
-        val failed = { _: Throwable? -> runOnUiThread {
+        val failed = { _: Throwable? -> withCurrentActivity {
             markerMutationInFlight = false
             markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
         } }
         runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.APP).accept(
-            { disabled -> runOnUiThread {
+            { disabled -> withCurrentActivity {
                 if (disabled == null) failed(null) else {
                     disabled.setMessageDelegate(markerMessageDelegate, MARKER_NATIVE_APP)
                     runtime.webExtensionController.enable(disabled, WebExtensionController.EnableSource.APP).accept(
-                        { enabled -> runOnUiThread {
+                        { enabled -> withCurrentActivity {
                             if (enabled?.id != MARKER_EXTENSION_ID || enabled.metaData.version != MARKER_VERSION) {
                                 failed(null)
                             } else {
@@ -462,8 +475,9 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun refreshMarkerState(after: (() -> Unit)? = null) {
+        if (!ownsRuntime()) return
         runtime.webExtensionController.list().accept(
-            { extensions -> runOnUiThread {
+            { extensions -> withCurrentActivity {
                 val exact = extensions.orEmpty().singleOrNull { it.id == MARKER_EXTENSION_ID }
                 if (exact == null) {
                     markerPort?.disconnect()
@@ -481,7 +495,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 markerMutationInFlight = false
                 after?.invoke()
             } },
-            { runOnUiThread {
+            { withCurrentActivity {
                 markerMutationInFlight = false
                 markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
             } },
@@ -489,6 +503,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun changeMarker(operation: String) {
+        if (!ownsRuntime()) return
         if (markerMutationInFlight) return
         markerMutationInFlight = true
         if (operation == "reinstall") {
@@ -496,16 +511,16 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             return
         }
         runtime.webExtensionController.list().accept(
-            { extensions -> runOnUiThread {
+            { extensions -> withCurrentActivity {
                 val exact = extensions.orEmpty().singleOrNull { it.id == MARKER_EXTENSION_ID }
                 if (exact == null) {
                     refreshMarkerState()
-                    return@runOnUiThread
+                    return@withCurrentActivity
                 }
                 val success = { _: Any? -> refreshMarkerState {
                     if (operation == "enable") installMarkerExtension()
                 } }
-                val failed = { _: Throwable? -> runOnUiThread {
+                val failed = { _: Throwable? -> withCurrentActivity {
                     markerMutationInFlight = false
                     markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
                 } }
@@ -518,7 +533,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                     else -> markerMutationInFlight = false
                 }
             } },
-            { runOnUiThread {
+            { withCurrentActivity {
                 markerMutationInFlight = false
                 markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
             } },
@@ -527,26 +542,28 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
 
     private val markerMessageDelegate = object : WebExtension.MessageDelegate {
         override fun onConnect(port: WebExtension.Port) {
+            if (!ownsRuntime()) return
             val sender = port.sender
             if (port.name != MARKER_NATIVE_APP || sender.webExtension.id != MARKER_EXTENSION_ID ||
                 sender.environmentType != WebExtension.MessageSender.ENV_TYPE_EXTENSION
             ) {
-                runOnUiThread { markerStatus.text = "GV-MARKER-SCHEMA-REJECTED slot=$slot" }
+                withCurrentActivity { markerStatus.text = "GV-MARKER-SCHEMA-REJECTED slot=$slot" }
                 port.disconnect()
                 return
             }
             markerPort = port
             port.setDelegate(object : WebExtension.PortDelegate {
                 override fun onPortMessage(message: Any, port: WebExtension.Port) {
+                    if (!ownsRuntime()) return
                     if (port !== markerPort || message !is JSONObject || message.optString("type") != "result") {
-                        runOnUiThread { markerStatus.text = "GV-MARKER-SCHEMA-REJECTED slot=$slot" }
+                        withCurrentActivity { markerStatus.text = "GV-MARKER-SCHEMA-REJECTED slot=$slot" }
                         return
                     }
                     val reportedSlot = message.optString("slot")
                     val prior = message.optString("prior")
                     val current = message.optString("current")
                     if (reportedSlot == slot && prior in setOf("A", "B") && current in setOf("A", "B")) {
-                        runOnUiThread {
+                        withCurrentActivity {
                             markerStatus.text = "GV-MARKER-RESULT slot=$slot prior=$prior current=$current profile=$profileId"
                         }
                     }
@@ -754,6 +771,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun discoverAction() {
+        if (!ownsRuntime()) return
         pendingPopupRequestId = null
         tracking.unavailable()
         renderTracking()
@@ -798,6 +816,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun bindAction(extension: WebExtension) {
+        if (!ownsRuntime()) return
         clearActionDelegates()
         boundExtension = extension
         extension.setActionDelegate(actionDelegate)
@@ -807,7 +826,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private fun clearActionDelegates() {
         pendingPopupRequestId = null
         boundExtension?.let { extension ->
-            extension.setActionDelegate(null)
+            if (ownsRuntime()) extension.setActionDelegate(null)
             session.webExtensionController.setActionDelegate(extension, null)
         }
         boundExtension = null
@@ -870,7 +889,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         callbackSession: GeckoSession?,
         action: WebExtension.Action,
     ) {
-        if (extension !== boundExtension) return
+        if (!ownsRuntime() || extension !== boundExtension) return
         runOnUiThread {
             if (callbackSession == null) defaultAction = action else sessionAction = action
             val default = defaultAction
@@ -958,6 +977,10 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             dataCollectionPermissions: Array<out String>,
         ): GeckoResult<WebExtension.PermissionPromptResponse> {
             val result = GeckoResult<WebExtension.PermissionPromptResponse>()
+            if (!ownsRuntime()) {
+                result.complete(WebExtension.PermissionPromptResponse(false, false, false))
+                return result
+            }
             if (!isExpectedCsfloat(extension.id, extension.metaData.version)) {
                 runOnUiThread {
                     installFailure = PrototypeDiagnostic.CONSENT_IDENTITY_MISMATCH
@@ -1007,6 +1030,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     companion object {
+        private var currentActivity: GeckoViewPrototypeActivity? = null
         var sharedRuntime: GeckoRuntime? = null
         var sharedProfileId: String? = null
 
