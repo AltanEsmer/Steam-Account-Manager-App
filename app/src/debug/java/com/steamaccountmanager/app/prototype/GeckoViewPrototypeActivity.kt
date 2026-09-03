@@ -304,7 +304,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
         } }
         runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.APP).accept(
-            { disabled ->
+            { disabled -> runOnUiThread {
                 if (disabled == null) failed(null) else {
                     disabled.setMessageDelegate(markerMessageDelegate, MARKER_NATIVE_APP)
                     runtime.webExtensionController.enable(disabled, WebExtensionController.EnableSource.APP).accept(
@@ -320,7 +320,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                         failed,
                     )
                 }
-            },
+            } },
             failed,
         )
     }
