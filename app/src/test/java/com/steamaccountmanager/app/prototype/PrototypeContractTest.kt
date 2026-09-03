@@ -9,16 +9,22 @@ class PrototypeContractTest {
     @Test
     fun `navigation gate allows only exact fixture and secure Steam destinations`() {
         assertTrue(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/A", "A"))
+        assertTrue(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/A#A-history", "A"))
         assertTrue(isPrototypeNavigationAllowed("https://steamcommunity.com/openid/login", "A"))
         assertTrue(isPrototypeNavigationAllowed("https://login.steampowered.com/jwt/finalizelogin", "A"))
         assertTrue(isPrototypeNavigationAllowed("https://store.steampowered.com/login/", "A"))
         assertTrue(isPrototypeNavigationAllowed("https://help.steampowered.com/en/wizard/HelpWithLogin", "A"))
 
         assertFalse(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/B", "A"))
+        assertFalse(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/A#B-history", "A"))
+        assertFalse(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/A?slot=A", "A"))
+        assertFalse(isPrototypeNavigationAllowed("http://user@127.0.0.1:38947/slot/A", "A"))
         assertFalse(isPrototypeNavigationAllowed("https://steamcommunity.com.evil.invalid/", "A"))
         assertFalse(isPrototypeNavigationAllowed("https://example.invalid/secret?token=hidden#fragment", "A"))
         assertFalse(isPrototypeNavigationAllowed("http://steamcommunity.com/", "A"))
         assertFalse(isPrototypeNavigationAllowed("intent://steamcommunity.com/", "A"))
+        assertFalse(isPrototypeNavigationAllowed("not a URI", "A"))
+        assertFalse(isPrototypeNavigationAllowed("https://user@steamcommunity.com/", "A"))
     }
 
     @Test
@@ -29,6 +35,10 @@ class PrototypeContractTest {
         )
         assertFalse(PROTOTYPE_NAVIGATION_BLOCKED_MESSAGE.contains("example.invalid"))
         assertFalse(PROTOTYPE_NAVIGATION_BLOCKED_MESSAGE.contains("token="))
+        assertEquals(
+            "GV-EXTERNAL-HANDOFF-UNAVAILABLE: No external browser can open this destination. Stay here.",
+            PROTOTYPE_EXTERNAL_HANDOFF_UNAVAILABLE_MESSAGE,
+        )
     }
 
     @Test

@@ -34,10 +34,22 @@ class PrototypeProfileIsolationTest {
         awaitText("Reload")
         click("Test allowed navigation")
         awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
+        awaitText("GV7-NAV-HISTORY")
+        click("Back")
+        awaitText("GV7-NAV-BASE")
+        click("Forward")
+        awaitText("GV7-NAV-HISTORY")
+        click("Reload")
+        awaitText("GV7-NAV-HISTORY")
+        click("Open allowed fixture window")
+        awaitText("GV-NAVIGATION-NEW-WINDOW")
         click("Test blocked navigation")
         awaitText("GV-NAVIGATION-BLOCKED: Destination blocked. Stay here or open it in your external browser.")
         awaitText("Stay here")
         awaitText("Open in external browser")
+        click("Test unavailable external handoff")
+        click("Open in external browser")
+        awaitText("GV-EXTERNAL-HANDOFF-UNAVAILABLE: No external browser can open this destination. Stay here.")
     }
 
     @Test
