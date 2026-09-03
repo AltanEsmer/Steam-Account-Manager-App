@@ -20,6 +20,26 @@ class PrototypeProfileIsolationTest {
     private val context = instrumentation.targetContext
 
     @Test
+    fun routerRecreationDuringPendingSwitchFinishesCleanupWithoutStaleAuthorization() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Open synthetic slot A")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 45_000)
+
+        backToRouter()
+        click("Open synthetic slot B")
+        click("Recreate router activity")
+
+        awaitText("GV-ROUTER-READY")
+        awaitText("selected=A")
+        awaitNoAppChildProcesses(10_000)
+        awaitText("selected=A")
+    }
+
+    @Test
     fun explicitStopSupersedesPendingCrossProfileSelection() {
         val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
         context.startActivity(
@@ -158,6 +178,12 @@ class PrototypeProfileIsolationTest {
         val prefix = "${context.packageName}:"
         return (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
             .runningAppProcesses.orEmpty().any { it.processName.startsWith(prefix) }
+    }
+
+    private fun awaitNoAppChildProcesses(timeoutMs: Long) {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
+        while (appChildProcessRunning() && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(200)
+        assertFalse(appChildProcessRunning())
     }
 
     private fun ensureMarkerEnabled(slot: String) {
