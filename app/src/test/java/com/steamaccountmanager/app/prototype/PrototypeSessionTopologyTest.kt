@@ -91,6 +91,29 @@ class PrototypeSessionTopologyTest {
     }
 
     @Test
+    fun `explicit stop supersedes a pending profile without authorizing it`() {
+        val switches = ProfileSwitchCoordinator("gv_a")
+        val pendingB = switches.request("gv_b")
+        val stop = switches.stop()
+
+        assertFalse(switches.isPending(pendingB.generation, "gv_b"))
+        assertTrue(switches.isPending(stop.generation, null))
+        assertFalse(switches.processDeathObserved(pendingB.generation, "gv_b"))
+        assertTrue(switches.processDeathObserved(stop.generation, null))
+    }
+
+    @Test
+    fun `same profile reopen supersedes explicit stop but still waits for death`() {
+        val switches = ProfileSwitchCoordinator("gv_b")
+        val stop = switches.stop()
+        val reopen = switches.request("gv_b")
+
+        assertTrue(reopen.requiresProcessRestart)
+        assertFalse(switches.processDeathObserved(stop.generation, null))
+        assertTrue(switches.processDeathObserved(reopen.generation, "gv_b"))
+    }
+
+    @Test
     fun `switch timeout fails closed and generations remain monotonic`() {
         val switches = ProfileSwitchCoordinator("gv_a")
         val first = switches.request("gv_b")

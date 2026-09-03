@@ -1,7 +1,9 @@
 package com.steamaccountmanager.app.prototype
 
 import android.accessibilityservice.AccessibilityService
+import android.app.ActivityManager
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
@@ -16,6 +18,46 @@ import org.junit.runner.RunWith
 class PrototypeProfileIsolationTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+
+    @Test
+    fun explicitStopSupersedesPendingCrossProfileSelection() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Open synthetic slot A")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 45_000)
+
+        backToRouter()
+        click("Open synthetic slot B")
+        click("Stop worker process")
+
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        SystemClock.sleep(4_000)
+        assertFalse(appChildProcessRunning())
+    }
+
+    @Test
+    fun reopenDuringExplicitStopWaitsForDeathThenRestoresSelectedProfile() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Open synthetic slot B")
+        awaitText("GV6|slot=B|cookie=B|local=B|idb=B|nav=B", 45_000)
+
+        backToRouter()
+        click("Stop worker process")
+        click("Reopen selected slot")
+
+        SystemClock.sleep(3_000)
+        awaitText("GV6|slot=B|cookie=B|local=B|idb=B|nav=B", 20_000)
+        backToRouter()
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+    }
 
     @Test
     fun latestReopenWinsWhileCrossProfileShutdownIsPending() {
@@ -110,6 +152,12 @@ class PrototypeProfileIsolationTest {
     private fun backToRouter() {
         instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
         awaitText("Reopen selected slot")
+    }
+
+    private fun appChildProcessRunning(): Boolean {
+        val prefix = "${context.packageName}:"
+        return (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
+            .runningAppProcesses.orEmpty().any { it.processName.startsWith(prefix) }
     }
 
     private fun ensureMarkerEnabled(slot: String) {
