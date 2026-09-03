@@ -42,6 +42,16 @@ class PrototypeContractTest {
     }
 
     @Test
+    fun `external handoff accepts only well formed web destinations`() {
+        assertTrue(isPrototypeExternalHandoffEligible("https://example.invalid/path?redacted=yes"))
+        assertTrue(isPrototypeExternalHandoffEligible("HTTP://example.invalid/path"))
+        assertFalse(isPrototypeExternalHandoffEligible("not a URI"))
+        assertFalse(isPrototypeExternalHandoffEligible("https:///missing-host"))
+        assertFalse(isPrototypeExternalHandoffEligible("https://user@example.invalid/path"))
+        assertFalse(isPrototypeExternalHandoffEligible("intent://example.invalid/path"))
+    }
+
+    @Test
     fun `consent identity must match the exact CSFloat package`() {
         assertTrue(isExpectedCsfloat(CSFLOAT_ID, CSFLOAT_VERSION))
         assertFalse(isExpectedCsfloat("unexpected@example.invalid", CSFLOAT_VERSION))

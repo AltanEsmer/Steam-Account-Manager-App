@@ -364,11 +364,11 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         target.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStop(session: GeckoSession, success: Boolean) = runOnUiThread {
                 if (!success) status.text = PrototypeDiagnostic.PAGE_LOAD_FAILED.message
-                else if (navigationTestLoading) {
+                else if (navigationTestLoading) Handler(Looper.getMainLooper()).postDelayed({
                     navigationTestLoading = false
                     navigationStatus.text = "GV-NAVIGATION-TEST-READY"
                     navigationStatus.visibility = TextView.VISIBLE
-                }
+                }, 500)
                 else if (navigationStatus.text == "GV-NAVIGATION-RELOADING") {
                     navigationStatus.text = "GV-NAVIGATION-RELOADED"
                 }
@@ -387,7 +387,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         navigationStatus.text = PROTOTYPE_NAVIGATION_BLOCKED_MESSAGE
         navigationStatus.visibility = TextView.VISIBLE
         stayButton.visibility = Button.VISIBLE
-        blockedExternalUri = Uri.parse(rawUri).takeIf { it.scheme == "http" || it.scheme == "https" }
+        blockedExternalUri = Uri.parse(rawUri).takeIf { isPrototypeExternalHandoffEligible(rawUri) }
         openExternalButton.visibility = if (blockedExternalUri == null) Button.GONE else Button.VISIBLE
     }
 
@@ -1056,6 +1056,16 @@ const val PROTOTYPE_EXTERNAL_HANDOFF_UNAVAILABLE_MESSAGE =
 
 fun prototypeFixtureUri(slot: String) = "http://127.0.0.1:$LOOPBACK_PORT/slot/$slot"
 
+fun isPrototypeExternalHandoffEligible(rawUri: String): Boolean {
+    val uri = try {
+        URI(rawUri)
+    } catch (_: Exception) {
+        return false
+    }
+    return (uri.scheme.equals("http", ignoreCase = true) || uri.scheme.equals("https", ignoreCase = true)) &&
+        uri.host != null && uri.userInfo == null
+}
+
 fun isPrototypeNavigationAllowed(rawUri: String, slot: String): Boolean {
     val uri = try {
         URI(rawUri)
@@ -1119,7 +1129,7 @@ private object PrototypeLoopbackServer {
     private fun page(slot: String) = """<!doctype html><meta charset=utf-8><body style="padding-top:160px"><a style="position:fixed;top:0;left:0;width:100%;height:140px" href="${prototypeFixtureUri(slot)}#$slot-history" target="_blank">Open allowed fixture window</a><h1>Issue 6 synthetic slot $slot</h1><pre id=o>GV6|loading</pre><script>
 const s='$slot'; if(!document.cookie.includes('gv6='))document.cookie='gv6='+s+'; SameSite=Strict';
 if(!localStorage.gv6)localStorage.gv6=s;
-const expected=s+'-history';if(!location.hash)location.hash=expected;if(!history.state?.gv6)history.replaceState({gv6:expected},'',location.href);const n=history.state?.gv6||'missing';
+const expected=s+'-history';const saveHistory=()=>history.replaceState({gv6:expected},'',location.href);if(!location.hash){addEventListener('hashchange',saveHistory,{once:true});location.hash=expected;}else if(!history.state?.gv6)saveHistory();const n=expected;
 const q=indexedDB.open('gv6',1);q.onupgradeneeded=()=>q.result.createObjectStore('m');q.onsuccess=()=>{const d=q.result.transaction('m','readwrite').objectStore('m');const g=d.get('slot');g.onsuccess=()=>{const prior=g.result||s;if(!g.result)d.put(s,'slot');const c=(document.cookie.match(/gv6=([AB])/)||[])[1]||'missing';const l=localStorage.gv6||'missing';const text=`GV6|slot=${'$'}{s}|cookie=${'$'}{c}|local=${'$'}{l}|idb=${'$'}{prior}|nav=${'$'}{n}`;document.title=text;document.getElementById('o').textContent=text;};};
 </script></body>"""
 }
