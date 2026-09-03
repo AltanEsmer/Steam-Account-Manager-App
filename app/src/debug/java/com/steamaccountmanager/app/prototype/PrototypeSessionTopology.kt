@@ -29,7 +29,7 @@ data class ProfileSwitchRequest(
     val authorizedProfileId: String?,
 )
 
-class ProfileSwitchCoordinator(initialProfileId: String) {
+class ProfileSwitchCoordinator(initialProfileId: String?) {
     private var activeProfileId = initialProfileId
     private var pendingProfileId: String? = null
     private var pendingGeneration: Long? = null
@@ -59,12 +59,22 @@ class ProfileSwitchCoordinator(initialProfileId: String) {
         return authorized
     }
 
+    fun isPending(generation: Long, profileId: String): Boolean =
+        generation == pendingGeneration && profileId == pendingProfileId
+
     fun timedOut(generation: Long): Boolean {
         if (generation != pendingGeneration) return false
         pendingProfileId = null
         pendingGeneration = null
         failureCode = "GV-PROFILE-SWITCH-TIMEOUT"
         return true
+    }
+
+    fun invalidate() {
+        nextGeneration++
+        pendingProfileId = null
+        pendingGeneration = null
+        failureCode = null
     }
 }
 

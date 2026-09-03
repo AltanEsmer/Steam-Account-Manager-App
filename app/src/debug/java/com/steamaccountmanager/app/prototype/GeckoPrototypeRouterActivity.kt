@@ -28,13 +28,16 @@ internal fun slotProfileId(slot: String): String = when (slot) {
 
 class GeckoPrototypeRouterActivity : ComponentActivity() {
     private lateinit var status: TextView
-    private var generation = 0L
+    private lateinit var switches: ProfileSwitchCoordinator
     private var selectedSlot: String? = null
+    private var stopGeneration = 0L
+    private var destroyed = false
     private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         selectedSlot = getPreferences(MODE_PRIVATE).getString("slot", null)
+        switches = ProfileSwitchCoordinator(selectedSlot?.let(::slotProfileId))
         status = TextView(this).apply { setPadding(24, 24, 24, 24) }
         setContentView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -44,9 +47,12 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             addView(button("Reopen selected slot") { selectedSlot?.let(::select) })
             addView(button("Recreate router activity") { recreate() })
             addView(button("Stop worker process") {
+                val requestedGeneration = ++stopGeneration
                 stopWorker(
                     "GV-WORKER-STOP-WAIT",
                     "GV-WORKER-STOP-TIMEOUT",
+                    requestedGeneration,
+                    { requestedGeneration == stopGeneration },
                 ) { stoppedGeneration -> render("GV-WORKER-STOPPED generation=$stoppedGeneration") }
             })
         })
@@ -59,38 +65,58 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
     }
 
     private fun select(slot: String) {
-        val previous = selectedSlot
-        if (previous == null || previous == slot || !workerRunning()) {
+        stopGeneration++
+        val profileId = slotProfileId(slot)
+        val request = switches.request(profileId)
+        if (!request.requiresProcessRestart) {
             authorize(slot)
+            return
+        }
+        if (!workerRunning()) {
+            if (switches.processDeathObserved(request.generation) == profileId) authorize(slot)
             return
         }
         stopWorker(
             "GV-PROFILE-SWITCH-WAIT",
             "GV-PROFILE-SWITCH-TIMEOUT",
-        ) { authorize(slot) }
+            request.generation,
+            { switches.isPending(request.generation, profileId) },
+        ) { stoppedGeneration ->
+            if (switches.processDeathObserved(stoppedGeneration) == profileId) authorize(slot)
+        }
     }
 
     private fun stopWorker(
         waitCode: String,
         timeoutCode: String,
+        requestedGeneration: Long,
+        isCurrent: () -> Boolean,
         stopped: (Long) -> Unit,
     ) {
-        generation += 1
-        val requestedGeneration = generation
         render("$waitCode generation=$requestedGeneration")
         sendBroadcast(Intent(this, PrototypeWorkerShutdownReceiver::class.java).setAction(ACTION_SHUTDOWN).apply {
             putExtra(EXTRA_GENERATION, requestedGeneration)
         })
         val deadline = System.currentTimeMillis() + 8_000
         fun poll() {
-            if (requestedGeneration != generation) return
+            if (destroyed || !isCurrent()) return
             terminateAppChildProcesses()
             if (!workerRunning()) stopped(requestedGeneration)
             else if (System.currentTimeMillis() >= deadline) {
-                render("$timeoutCode generation=$requestedGeneration")
+                if (timeoutCode == "GV-PROFILE-SWITCH-TIMEOUT") {
+                    if (switches.timedOut(requestedGeneration)) render("$timeoutCode generation=$requestedGeneration")
+                } else render("$timeoutCode generation=$requestedGeneration")
             } else handler.postDelayed(::poll, 200)
         }
         handler.postDelayed(::poll, 200)
+    }
+
+    override fun onDestroy() {
+        destroyed = true
+        stopGeneration++
+        switches.invalidate()
+        handler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 
     private fun authorize(slot: String) {

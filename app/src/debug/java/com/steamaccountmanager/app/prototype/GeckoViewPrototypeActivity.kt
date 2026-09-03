@@ -258,6 +258,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         ).accept(
             { extension -> runOnUiThread {
                 if (extension?.id != MARKER_EXTENSION_ID) {
+                    markerMutationInFlight = false
                     markerStatus.text = "GV-MARKER-INSTALL-FAILED"
                     return@runOnUiThread
                 }
@@ -266,6 +267,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 refreshMarkerState()
             } },
             { runOnUiThread {
+                markerMutationInFlight = false
                 markerStatus.text = "GV-MARKER-INSTALL-FAILED"
                 markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=$slot profile=$profileId"
             } },
