@@ -16,10 +16,10 @@ the final compatibility check before any production browser migration may begin.
 
 ## Before you start
 
-- Test exact source commit `803acd1001455a3722c13991daabf4741201d706`.
-- Use `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle7-final\app-debug-6E4E7CED.apk`.
-- The APK is 598,793,996 bytes. Its SHA-256 must be
-  `6E4E7CED8C7CE1039D39A7D7B394C56445A626C398708DC9A1DC6D368A5A1275`.
+- Test exact source commit `b81eeab10ee0554850f51ff9702052ce96ddba19`.
+- Use `C:\Users\esmer\AppData\Local\Temp\sam-gv7-navigation-repair-b81eeab\app-debug-4A5FF6D7.apk`.
+- The APK is 598,810,380 bytes. Its SHA-256 must be
+  `4A5FF6D78B1B9FF75343B2D0681FF473F29A935C811FE3B5DC63F1EE99610755`.
 - Run the complete procedure once on the dedicated emulator and once on a supported
   physical Android device running Android 9/API 28 or newer. Record the exact device
   model, Android version, API level, and CPU ABI. Do not use a personal emulator or
@@ -200,12 +200,13 @@ Use the same target throughout one run.
 
     Expected: Allowed Steam pages and authentication redirects load in-app.
 
-31. Follow a clearly unrelated destination from the Steam page.
+31. While an allowed page is loaded, select **Test blocked navigation**, choose
+    **Stay here**, then repeat and choose **Open in external browser**.
 
-    Expected: The unrelated destination does not load in the embedded browser; the
-    app offers to open it externally. If it opens in-app or no external choice exists,
-    mark GV-15 `FAIL`. Do not excuse this result because navigation parity is planned
-    for issue #9.
+    Expected: The fixed unrelated destination does not load in the embedded browser;
+    the current page remains visible, the message contains no destination details, and
+    an external browser opens only after the explicit choice. If it opens in-app, opens
+    externally without confirmation, or no external choice exists, mark GV-15 `FAIL`.
 
 32. Exercise normal back, forward, and reload behavior on the allowed pages.
 
