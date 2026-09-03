@@ -10,6 +10,8 @@ class PrototypeContractTest {
     fun `navigation gate allows only exact fixture and secure Steam destinations`() {
         assertTrue(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/A", "A"))
         assertTrue(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/A#A-history", "A"))
+        assertTrue(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/A/next#A-history", "A"))
+        assertFalse(isPrototypeNavigationAllowed("http://127.0.0.1:38947/slot/A/other", "A"))
         assertTrue(isPrototypeNavigationAllowed("https://steamcommunity.com/openid/login", "A"))
         assertTrue(isPrototypeNavigationAllowed("https://login.steampowered.com/jwt/finalizelogin", "A"))
         assertTrue(isPrototypeNavigationAllowed("https://store.steampowered.com/login/", "A"))

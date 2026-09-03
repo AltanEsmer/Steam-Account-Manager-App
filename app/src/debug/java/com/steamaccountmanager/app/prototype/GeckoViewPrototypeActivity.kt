@@ -75,6 +75,9 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private var blockedExternalUri: Uri? = null
     private var forceMissingExternalHandler = false
     private var navigationTestLoading = false
+    private var reloading = false
+    private var newWindowLoading: GeckoSession? = null
+    private var newWindowOpener: GeckoSession? = null
     private var pendingNewSession: GeckoSession? = null
 
     private val navigationDelegate = object : GeckoSession.NavigationDelegate {
@@ -93,8 +96,8 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             hasUserGesture: Boolean,
         ) {
             when (url) {
-                prototypeFixtureUri(slot) -> navigationStatus.text = "GV7-NAV-BASE"
-                "${prototypeFixtureUri(slot)}#$slot-history" -> navigationStatus.text = "GV7-NAV-HISTORY"
+                prototypeFixtureUri(slot), "${prototypeFixtureUri(slot)}#$slot-history" -> navigationStatus.text = "GV7-NAV-BASE"
+                prototypeFixtureUri(slot, true), "${prototypeFixtureUri(slot, true)}#$slot-history" -> navigationStatus.text = "GV7-NAV-NEXT"
                 else -> return
             }
             navigationStatus.visibility = TextView.VISIBLE
@@ -116,6 +119,8 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             }
             val next = GeckoSession().also(::configureSession)
             pendingNewSession = next
+            newWindowLoading = next
+            newWindowOpener = session
             Handler(Looper.getMainLooper()).post {
                 if (isDestroyed || pendingNewSession !== next) return@post
                 geckoView.releaseSession()
@@ -124,9 +129,6 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 pendingNewSession = null
                 geckoView.setSession(next)
                 runtime.webExtensionController.setTabActive(next, true)
-                session.close()
-                navigationStatus.text = "GV-NAVIGATION-NEW-WINDOW"
-                navigationStatus.visibility = TextView.VISIBLE
             }
             return GeckoResult.fromValue(next)
         }
@@ -238,13 +240,14 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 addView(backButton)
                 addView(forwardButton)
                 addView(button("Reload") {
+                    reloading = true
                     navigationStatus.text = "GV-NAVIGATION-RELOADING"
                     navigationStatus.visibility = TextView.VISIBLE
                     session.reload()
                 })
                 addView(button("Test allowed navigation") {
                     navigationTestLoading = true
-                    loadSyntheticMarker()
+                    session.loadUri(prototypeFixtureUri(slot, true))
                 })
                 addView(button("Test blocked navigation") { session.loadUri(BLOCKED_TEST_URL) })
                 addView(button("Test unavailable external handoff") {
@@ -345,6 +348,8 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         runtime.webExtensionController.promptDelegate = null
         runtime.webExtensionController.setTabActive(session, false)
         session.close()
+        newWindowOpener?.takeIf { it !== session }?.close()
+        newWindowOpener = null
         pendingNewSession?.takeIf { it !== session }?.close()
         pendingNewSession = null
         super.onDestroy()
@@ -364,12 +369,17 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         target.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStop(session: GeckoSession, success: Boolean) = runOnUiThread {
                 if (!success) status.text = PrototypeDiagnostic.PAGE_LOAD_FAILED.message
-                else if (navigationTestLoading) Handler(Looper.getMainLooper()).postDelayed({
+                else if (newWindowLoading === session) {
+                    newWindowLoading = null
+                    newWindowOpener?.close()
+                    newWindowOpener = null
+                    status.text = "GV-NAVIGATION-NEW-WINDOW"
+                } else if (navigationTestLoading) {
                     navigationTestLoading = false
                     navigationStatus.text = "GV-NAVIGATION-TEST-READY"
                     navigationStatus.visibility = TextView.VISIBLE
-                }, 500)
-                else if (navigationStatus.text == "GV-NAVIGATION-RELOADING") {
+                } else if (reloading) {
+                    reloading = false
                     navigationStatus.text = "GV-NAVIGATION-RELOADED"
                 }
             }
@@ -1054,7 +1064,8 @@ const val PROTOTYPE_NAVIGATION_BLOCKED_MESSAGE =
 const val PROTOTYPE_EXTERNAL_HANDOFF_UNAVAILABLE_MESSAGE =
     "GV-EXTERNAL-HANDOFF-UNAVAILABLE: No external browser can open this destination. Stay here."
 
-fun prototypeFixtureUri(slot: String) = "http://127.0.0.1:$LOOPBACK_PORT/slot/$slot"
+fun prototypeFixtureUri(slot: String, next: Boolean = false) =
+    "http://127.0.0.1:$LOOPBACK_PORT/slot/$slot" + if (next) "/next" else ""
 
 fun isPrototypeExternalHandoffEligible(rawUri: String): Boolean {
     val uri = try {
@@ -1074,7 +1085,7 @@ fun isPrototypeNavigationAllowed(rawUri: String, slot: String): Boolean {
     }
     val fixture = URI(prototypeFixtureUri(slot))
     if (uri.scheme == fixture.scheme && uri.host == fixture.host && uri.port == fixture.port &&
-        uri.path == fixture.path && uri.rawQuery == null && uri.userInfo == null &&
+        (uri.rawPath == fixture.rawPath || uri.rawPath == "${fixture.rawPath}/next") && uri.rawQuery == null && uri.userInfo == null &&
         (uri.rawFragment == null || uri.rawFragment == "$slot-history")
     ) return true
     if (!uri.scheme.equals("https", ignoreCase = true) || uri.userInfo != null) return false
@@ -1100,7 +1111,7 @@ private object PrototypeLoopbackServer {
                         socket.soTimeout = 2_000
                         val request = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII))
                             .readLine().orEmpty()
-                        val requestedSlot = Regex("^GET /slot/([AB]) HTTP/1\\.[01]$")
+                        val requestedSlot = Regex("^GET /slot/([AB])(?:/next)? HTTP/1\\.[01]$")
                             .matchEntire(request)?.groupValues?.get(1)
                         val body = if (requestedSlot == null) {
                             "<!doctype html><title>GV6|error=request</title>"
@@ -1129,7 +1140,7 @@ private object PrototypeLoopbackServer {
     private fun page(slot: String) = """<!doctype html><meta charset=utf-8><body style="padding-top:160px"><a style="position:fixed;top:0;left:0;width:100%;height:140px" href="${prototypeFixtureUri(slot)}#$slot-history" target="_blank">Open allowed fixture window</a><h1>Issue 6 synthetic slot $slot</h1><pre id=o>GV6|loading</pre><script>
 const s='$slot'; if(!document.cookie.includes('gv6='))document.cookie='gv6='+s+'; SameSite=Strict';
 if(!localStorage.gv6)localStorage.gv6=s;
-const expected=s+'-history';const saveHistory=()=>history.replaceState({gv6:expected},'',location.href);if(!location.hash){addEventListener('hashchange',saveHistory,{once:true});location.hash=expected;}else if(!history.state?.gv6)saveHistory();const n=expected;
+const expected=s+'-history';if(!history.state?.gv6)history.replaceState({gv6:expected},'',location.pathname+'#'+expected);const n=history.state?.gv6||'missing';
 const q=indexedDB.open('gv6',1);q.onupgradeneeded=()=>q.result.createObjectStore('m');q.onsuccess=()=>{const d=q.result.transaction('m','readwrite').objectStore('m');const g=d.get('slot');g.onsuccess=()=>{const prior=g.result||s;if(!g.result)d.put(s,'slot');const c=(document.cookie.match(/gv6=([AB])/)||[])[1]||'missing';const l=localStorage.gv6||'missing';const text=`GV6|slot=${'$'}{s}|cookie=${'$'}{c}|local=${'$'}{l}|idb=${'$'}{prior}|nav=${'$'}{n}`;document.title=text;document.getElementById('o').textContent=text;};};
 </script></body>"""
 }
