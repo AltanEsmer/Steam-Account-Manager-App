@@ -71,8 +71,9 @@ Instrumentation result:
   activity recreation, screen reopen, worker stop/reopen, router recreation, and the
   retained marker upgrade path without a failure.
 - The navigation policy allowed the exact loopback fixture and configured HTTPS Steam
-  and Steam-auth hosts, while unit tests rejected deceptive suffixes, unrelated hosts,
-  insecure remote HTTP, user-info, malformed, and non-web destinations.
+  and Steam-auth hosts. Unit tests at this captured build rejected deceptive suffixes,
+  unrelated hosts, insecure remote HTTP, and non-web destinations; later regression
+  coverage adds user-info and malformed inputs without retroactively expanding this run.
 - The deterministic unrelated destination stayed out of GeckoView. The app remained
   foreground, retained the A page marker, displayed the fixed redacted
   `GV-NAVIGATION-BLOCKED` message, and offered **Stay here** and

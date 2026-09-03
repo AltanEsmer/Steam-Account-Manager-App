@@ -201,17 +201,23 @@ Use the same target throughout one run.
     Expected: Allowed Steam pages and authentication redirects load in-app.
 
 31. While an allowed page is loaded, select **Test blocked navigation**, choose
-    **Stay here**, then repeat and choose **Open in external browser**.
+    **Stay here**, then repeat and choose **Open in external browser**. Also use
+    **Test unavailable external handoff** and choose **Open in external browser**.
 
     Expected: The fixed unrelated destination does not load in the embedded browser;
     the current page remains visible, the message contains no destination details, and
     an external browser opens only after the explicit choice. If it opens in-app, opens
     externally without confirmation, or no external choice exists, mark GV-15 `FAIL`.
+    The unavailable-handler fixture must instead show the fixed recoverable
+    `GV-EXTERNAL-HANDOFF-UNAVAILABLE` state without exposing the destination.
 
-32. Exercise normal back, forward, and reload behavior on the allowed pages.
+32. Exercise normal back, forward, and reload behavior on the allowed fixture, then
+    activate **Open allowed fixture window**.
 
     Expected: Each control behaves predictably and never crosses from A to B. Missing
-    required controls or broken history means GV-15 `FAIL`.
+    required controls or broken history means GV-15 `FAIL`. The new-window request
+    remains in-app on the selected profile; an unrelated new-window target remains
+    blocked with the same explicit external-browser choice.
 
 33. Exercise the labeled popup failure and recovery controls, then observe one real
     recoverable network/load failure if it occurs naturally.
