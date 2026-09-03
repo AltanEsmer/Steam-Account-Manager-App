@@ -87,15 +87,17 @@ measurement is not a release, battery, or physical-device performance claim.
 ## Reviewable evidence
 
 - `evidence/issue-7/gv7-emulator-router-ready.png` — SHA-256
-  `0F3779C5CF53CC75ECC483C019FFBDF88BD6F5C2299E0B44BDB6888C7F518301`
+  `6299619534D38EABC1DE638BC2F9AB2637764A118D1B2B6F6F8F916E728A5231`
 - `evidence/issue-7/gv7-emulator-router-ready.xml` — SHA-256
   `0EE5BEF0EAA365BA799A62CC71FD5F7B52C1B826C39CFC756229FCDBBDB3E9CB`
 - `evidence/issue-7/gv7-emulator-navigation-blocked.png` — SHA-256
-  `7B7785E31341924469FBA500F7D440E82F100BB63AF3DB80092A8113D2F683BB`
+  `D7B484F7F052D03DB71A2B6CD0E7150B1F61329360B7015292584FDC747CEDB0`
 - `evidence/issue-7/gv7-emulator-navigation-blocked.xml` — SHA-256
   `2D88B0C5FBE392D727E9974439777243EEE71576CD7929EA4B6AFC150CA0BFAF`
 
-Both screenshots were visually inspected. Both XML dumps contain zero password nodes.
+The dedicated AVD's status-bar icons and clock were disabled during capture and the
+policy was restored immediately afterward, so both screenshots exclude the status
+bar. Both screenshots were visually inspected. Both XML dumps contain zero password nodes.
 The only cookie-like text is the fixed synthetic `cookie=A` marker. No Steam account,
 authentication, trade, payment, cookie/token, QR, or Steam Guard content was captured.
 
