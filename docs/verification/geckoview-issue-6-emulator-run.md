@@ -10,8 +10,8 @@ issue #7 `GO` decision.
 
 | Field | Value |
 | --- | --- |
-| App source commit and build variant | `bbe36da1aea680354750bd5ab2b7bf0fcc6d763d`, `debug` |
-| APK | `app/build/outputs/apk/debug/app-debug.apk`, 598,777,460 bytes, SHA-256 `1AD629D1E103A8568F203A92DB465A2236920A884EB51E04157AC970224D92CE`; preserved on the campaign host at `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle5-final\app-debug-1AD629D1.apk` |
+| App source commit and build variant | `54139b495627e9f0b12eea49ad57caf253dad899`, `debug` |
+| APK | `app/build/outputs/apk/debug/app-debug.apk`, 598,793,844 bytes, SHA-256 `34ED99AA253B8944539950BB5899D5EFCC4B1B6404E3AD1E3C88E39728BBBCFE`; preserved on the campaign host at `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle6-final\app-debug-34ED99AA.apk` |
 | Upstream baseline APK | Commit `8de0e23443250326afbf087346b8c6a7eef302b7`, `debug`, 63,099,195 bytes, SHA-256 `352A9BDA1FDFA2E11942F7BC9C794FB00C1F27762A9C591274230CE6BBED8FD2` |
 | GeckoView | `153.0.20260810162159`, stable Maven artifact |
 | CSFloat | Official signed Firefox artifact, ID `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}`, version `5.17.0`, GeckoView signed state `2` |
@@ -19,23 +19,26 @@ issue #7 `GO` decision.
 | Host | Windows 11 Pro 64-bit, version `10.0.26200`, build `26200`; Android Studio 2025.2.1 build `AI-252.25557.131.2521.14432022` |
 | Android target | Dedicated AVD `Codex_GeckoView_Campaign_API_36`, serial `emulator-5580`, Android 16/API 36, `x86_64`, Google Play image |
 | Emulator tooling | Android Emulator `36.2.12.0` build `14214601`; adb `36.0.0-13206524` |
-| Final report timestamps | Unit tests 2026-09-03 09:40:21 UTC; APK 09:40:26 UTC; instrumentation 09:39:52 UTC; lint 09:40:36 UTC; emulator matrix completed 09:52:49 UTC |
+| Final report timestamps | Unit tests 2026-09-03 12:18:58 UTC; instrumentation 12:18:32 UTC; APK 12:19:03 UTC; lint 12:19:13 UTC; emulator matrix completed 12:32:47 UTC |
 | Gate result | Issue #6 machine scenarios pass. Authenticated Steam state, live CSFloat tracking, physical-device behavior, navigation policy, and the issue #7 decision remain `NOT RUN`. |
 
 ## Selected isolation topology
 
-Each `(account, website)` pair maps to a fixed-width opaque `gv_` identifier. The
-identifier hashes length-prefixed UTF-8 input so neither account nor website text
-appears in the profile name and ambiguous concatenations cannot collide. Each
-identifier owns a persistent directory below the app's no-backup storage at
-`gecko-prototype-profiles`.
+Each domain `SessionIdentifier(accountId, websiteId)` maps to a fixed-width opaque
+`gv_` identifier. The identifier hashes the two length-prefixed UTF-8 fields so
+neither account nor website text appears in the profile name and ambiguous
+concatenations cannot collide. Each identifier owns a persistent directory below
+the app's no-backup storage at `gecko-prototype-profiles`.
 
 Only one reusable `:gecko_prototype` worker and one Gecko runtime are resident at
 a time. The worker starts with Gecko's `--profile <absolute profile path>` argument.
 Changing the selected pair stops the prior worker, waits a bounded eight seconds for
-the worker and all app-owned colon subprocesses to exit, then starts the new profile. It
-fails closed if shutdown cannot be proven. This avoids keeping every possible
-browser session resident while preserving each profile on disk.
+the worker and all app-owned colon subprocesses to exit, then starts the new profile.
+A process-wide cleanup barrier lets a recreated router join the existing cleanup
+without issuing another shutdown or starting a replacement inside the dying worker;
+only the latest selection is authorized after three empty polls. It fails closed if
+shutdown cannot be proven. This avoids keeping every possible browser session
+resident while preserving each profile on disk.
 
 Profiles remain below `noBackupFilesDir/gecko-prototype-profiles` while their browser
 session exists. Cleanup may delete only the owning profile after that account/website
@@ -62,27 +65,27 @@ Gradle instrumentation to the dedicated AVD, and every direct adb command used
 $env:ANDROID_HOME='C:\Users\esmer\AppData\Local\Android\Sdk'
 $env:ANDROID_SERIAL='emulator-5580'
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug lintDebug connectedDebugAndroidTest processReleaseMainManifest mergeReleaseAssets --rerun-tasks
-# exit 1: all unit/build/lint/release inputs and the four new router-race tests
+# exit 1 in 2m06s: all 40 unit/build/lint/release inputs and the router-race tests
 # passed; the legacy synthetic marker reported ENABLED but its native result message
 # did not reconnect before the test timeout
 
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' connectedDebugAndroidTest --rerun-tasks
-# exit 0 after a verified fresh Gradle install: BUILD SUCCESSFUL in 1m52s;
+# exit 0 after a verified fresh Gradle install: BUILD SUCCESSFUL in 2m09s;
 # 14 instrumentation tests passed with zero failures, errors, or skips
 
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug lintDebug processReleaseMainManifest mergeReleaseAssets --rerun-tasks
-# exit 0: BUILD SUCCESSFUL in 33s; 39 unit tests, debug assembly, lint, and
+# exit 0: BUILD SUCCESSFUL in 32s; 40 unit tests, debug assembly, lint, and
 # release-exclusion inputs passed
 
 $adb='C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
-& $adb -s emulator-5580 install -r C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle5-final\app-debug-1AD629D1.apk
+& $adb -s emulator-5580 install -r C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle6-final\app-debug-34ED99AA.apk
 & $adb -s emulator-5580 shell am start -W -n com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoPrototypeRouterActivity
 # exit 0: the exact APK installed and the exported router cold-launched. Select
 # Open synthetic slot A; the non-exported worker can be launched only with a slot.
 
 & $adb -s emulator-5580 shell am force-stop com.steamaccountmanager.app.debug
 & $adb -s emulator-5580 shell am start -W -n com.steamaccountmanager.app.debug/com.steamaccountmanager.app.prototype.GeckoPrototypeRouterActivity
-# both exit 0: select Reopen selected slot in the router. The cycle-5 restart
+# both exit 0: select Reopen selected slot in the router. The cycle-6 restart
 # evidence records the selected A profile and its enabled CSFloat state restored.
 
 & $adb -s emulator-5580 shell ps -A
@@ -93,7 +96,7 @@ $adb='C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
 # exit 0 with no matching error records
 ```
 
-Every direct adb command in the final cycle-5 acceptance run used `-s emulator-5580`
+Every direct adb command in the final cycle-6 acceptance run used `-s emulator-5580`
 and returned
 exit code 0. UI actions were driven with `adb shell input`; each result was checked
 with a fresh `uiautomator dump` and a sanitized screenshot. The current-source run
@@ -102,38 +105,42 @@ disabled while B remained enabled, A re-enabled and uninstalled while B remained
 enabled, A denial remaining absent, accepted retry restoring A, complete worker
 shutdown, worker reopen, and full package restart through the exported router.
 It also exercised rapid B-to-A selection, B-to-Stop, Stop-to-Reopen, and pending
-B-to-router-recreation ordering. The final case retained A, suppressed stale B
-authorization, and removed every app-owned child process within the existing bound.
+B-to-router-recreation followed by an immediate A reopen. The final case retained A,
+suppressed stale B authorization, kept the replacement A worker responsive beyond
+multiple cleanup polls, and later removed every app-owned child process within the
+existing bound.
 
-Before the successful instrumentation retry, `adb uninstall` returned
-`DELETE_FAILED_INTERNAL_ERROR` for both test and app packages because the failed
-Gradle run had already removed them; `pm list packages` confirmed neither package
-was installed, and the next Gradle task performed a fresh install. Two exact-source
-diagnostic runs observed the same synthetic marker native-message reconnection
-timeout while the extension state was visibly enabled. The second permitted retry
-passed all 14 tests; no source or timing workaround was added.
+Before the successful instrumentation retry, `pm list packages` and the process list
+confirmed that Gradle had removed both test and app packages. Bounded error-only
+logcat was empty. The first exact-source combined run observed the same synthetic
+marker native-message reconnection timeout seen in the prior cycle while the marker
+was visibly enabled. The permitted fresh-install retry passed all 14 tests; no source
+or timing workaround was added. Earlier host preflight attempts stopped before the
+test graph because `adb`, the Android SDK, and the repository's missing local JDK path
+were not present in that shell's environment. The recorded commands use explicit SDK,
+serial, and installed Android Studio JBR values rather than changing project config.
 
 Generated reports:
 
-- Unit tests: `app/build/reports/tests/testDebugUnitTest/index.html` — 39 tests,
+- Unit tests: `app/build/reports/tests/testDebugUnitTest/index.html` — 40 tests,
   zero failures, errors, or skips.
 - Instrumentation: `app/build/reports/androidTests/connected/debug/index.html` —
   14 tests, zero failures, errors, or skips.
 - Instrumentation XML:
   `app/build/outputs/androidTest-results/connected/debug/TEST-Codex_GeckoView_Campaign_API_36(AVD) - 16-_app-.xml`.
-- Lint: `app/build/reports/lint-results-debug.html` — zero errors and 108 warnings.
+- Lint: `app/build/reports/lint-results-debug.html` — zero errors and 107 warnings.
 
 ## Acceptance-to-proof result
 
 | Contract | Result | Proof |
 | --- | --- | --- |
-| Stable isolated profile identity | PASS | Unit tests cover deterministic IDs, ambiguous input pairs, Unicode, distinct empty-value encodings, and fixed-width redacted output. On-device A/B/A switching restored the correct engine-observed marker for A. |
-| Cookies, local storage, and IndexedDB | PASS | Instrumentation writes distinct engine-observed values for A and B, switches A → B → A, recreates the activity, closes/reopens the screen, and restarts the worker. A separate exact-serial adb check force-stops/restarts the app. Values restore only in their owning profile. |
+| Stable isolated profile identity | PASS | Unit tests feed the domain `SessionIdentifier` directly to the Gecko mapping and cover deterministic IDs, ambiguous input pairs, Unicode, distinct empty-value encodings, and fixed-width redacted output. On-device A/B/A switching restored the correct engine-observed marker for A. |
+| Cookies, local storage, IndexedDB, and navigation | PASS | Instrumentation writes distinct engine-observed values for A and B, including `history.state`-derived `A-history`/`B-history` values independent of local storage, then switches A → B → A, recreates the activity, closes/reopens the screen, and restarts the worker. A separate exact-serial adb check force-stops/restarts the app. Values restore only in their owning profile. |
 | Extension storage | PASS | Debug marker version `1.4` writes distinct native-message-observed values in each profile. A restores its value after B, activity recreation, screen close/reopen, worker recreation, and full app restart. |
-| Official CSFloat installed/enabled state | PASS | A and B independently began absent, independently displayed the exact install consent, and independently enabled the same signed ID/version. Disabling or uninstalling A did not change B. Explicit enable restored only A. Reinstalling A repeated consent; denial left A absent and a later accepted retry restored only A. |
-| Repeated switching | PASS | Instrumentation and the manual emulator matrix switch repeatedly without cross-profile marker exposure. Latest selection supersedes an older pending switch, explicit Stop supersedes a pending selection, Reopen supersedes a pending Stop, and destroyed routers cannot deliver stale authorization. The runtime/process design keeps one active profile resident rather than all stored profiles. |
+| Official CSFloat installed/enabled state | PASS | A and B independently began absent, independently displayed the exact install consent, and independently enabled the same signed ID/version. Disabling or uninstalling A did not change B. Explicit enable restored only A. Reinstalling A repeated consent; denial left A absent and a later accepted retry restored only A. Unit policy tests and live wiring also require revocation operations to target the same CSFloat ID across version drift while enable/action paths remain pinned to the exact approved version. A mismatched package was not staged in Gecko because creating or modifying one would violate the artifact rule. |
+| Repeated switching | PASS | Instrumentation and the manual emulator matrix switch repeatedly without cross-profile marker exposure. Latest selection supersedes an older pending switch, explicit Stop supersedes a pending selection, Reopen supersedes a pending Stop, and destroyed routers cannot deliver stale authorization. An immediate reopen after router recreation remains responsive beyond the old cleanup window. The runtime/process design keeps one active profile resident rather than all stored profiles. |
 | Activity and screen lifecycle | PASS | Activity recreation and browser screen close/reopen restored A's engine-observed page and extension markers without a duplicate install prompt. |
-| Worker process recreation | PASS | Explicit stop reported `GV-WORKER-STOPPED` only after the worker and all app-owned colon subprocesses were absent. Reopening restored A from the same persistent profile. Recreating the router during a pending switch invalidated authorization while allowing its bounded process cleanup to finish. |
+| Worker process recreation | PASS | Explicit stop reported `GV-WORKER-STOPPED` only after the worker and all app-owned colon subprocesses were absent. Reopening restored A from the same persistent profile. Recreating the router during a pending switch invalidated stale authorization, joined the already-started cleanup, and reopened A only after the dying worker was gone. |
 | Full app restart | PASS | Force-stop left no package process. A cold router launch retained the selected pair, and reopening the worker restored A's engine and CSFloat state. |
 | Failure and recovery | PASS | Worker shutdown has an eight-second bound and fails closed. Marker native-message reconnection is bounded to 30 attempts at two-second intervals. Install denial remains absent and retry is explicit. |
 | Release exclusion | PASS | Release merged assets contain no issue #6 marker extension, and the release merged manifest contains no prototype marker or prototype process entry. Release packaging remains unverified because the local release signing store is unavailable. |
@@ -150,7 +157,7 @@ Generated reports:
 | Pending B → latest A reopen | A restores; no B marker appears | Not resident | PASS |
 | Pending B → explicit Stop | Router retains A; no child process remains | Not resident | PASS |
 | Pending Stop → A reopen | A restores after proven worker death | Not resident | PASS |
-| Pending B → router recreation | Router retains A; stale B is not authorized; no child process remains | Not resident | PASS |
+| Pending B → router recreation → immediate A reopen | A reopens after old cleanup and remains responsive; stale B is not authorized; later Stop removes all children | Not resident | PASS |
 | Disable A, inspect B | A disabled | B remains enabled | PASS |
 | Re-enable then uninstall A, inspect B | A absent | B remains enabled | PASS |
 | Reinstall A | Consent denial leaves A absent; accepted retry restores A | B remains enabled | PASS |
@@ -166,10 +173,10 @@ performance claims. Stored profiles did not cause the process count to grow.
 
 | State | Processes | Total proportional set size |
 | --- | ---: | ---: |
-| A active after the current-head isolation matrix | 7 | 593,032 KiB |
-| Router only after a current-head proven worker stop | 1 | 73,413 KiB |
+| A active after the current-head isolation matrix | 7 | 606,495 KiB |
+| Router only after a current-head proven worker stop | 1 | 72,480 KiB |
 
-The issue #6 debug APK is 535,678,265 bytes larger than the upstream-main debug
+The issue #6 debug APK is 535,694,649 bytes larger than the upstream-main debug
 baseline. This is a fat debug artifact containing GeckoView native binaries; it is
 not a release-download or installed-size claim.
 
@@ -178,8 +185,8 @@ not a release-download or installed-size claim.
 Every PNG is an original 1080×2400 emulator capture. The first seven captures below
 record the pre-cycle-4 baseline at `9095a4d`; the first `gv6-cycle4-*` group records
 the intermediate cycle-4 source commit `9db111a`; and the `gv6-cycle4-final-*` group
-records source commit `8384c77`. Those groups are historical. Only the
-`gv6-cycle5-final-*` group at `bbe36da` is current proof.
+records source commit `8384c77`. Those groups and the `gv6-cycle5-final-*` group at
+`bbe36da` are historical. Only the `gv6-cycle6-*` group at `54139b4` is current proof.
 All retained PNGs were visually inspected, and the matching UI hierarchy XML was
 reviewed for sensitive fields before commit. They contain only the debug
 prototype, public fixture text, fixed `GV-*` status labels, and the official CSFloat
@@ -247,10 +254,29 @@ or authentication UI.
   SHA-256 `D7D7331327C83F8823886582A00C6E7A23347F326BE6D3C13EAEB36D7E0B5925`
 - [Final cycle 5 full restart restoration](evidence/issue-6/gv6-cycle5-final-full-restart.png):
   SHA-256 `92E0C16CA18A519F45E1A47EDD2CA567C440C36D19DDDCBA9E00049DF7C1CF95`
+- [Cycle 6 exact consent](evidence/issue-6/gv6-cycle6-consent.png): SHA-256
+  `F4ED0730439B9B80A7ADF018B33B16A430AF41A67BA397C5ECD95CB72D74F98B`
+- [Cycle 6 A enabled with independent navigation marker](evidence/issue-6/gv6-cycle6-a-enabled.png):
+  SHA-256 `77E75B4ABB8E1EDFB38020EA4EE2238B710E96E7B4E993D5206FA3253F292374`
+- [Cycle 6 B remains enabled after A disable](evidence/issue-6/gv6-cycle6-b-after-a-disable.png):
+  SHA-256 `76CA9467401F2DEAEEDDCF06BF7ACAE3448699A3E277B75CB99B2AB0864E42C8`
+- [Cycle 6 A revoked](evidence/issue-6/gv6-cycle6-a-revoked.png): SHA-256
+  `168FE51E70756998BCE245CCA004833C2CE8FDEB84DF21CFA91CC48578AC2A37`
+- [Cycle 6 B remains enabled after A uninstall](evidence/issue-6/gv6-cycle6-b-after-a-uninstall.png):
+  SHA-256 `CFC07400995D41F82D3B588FBE639828810C5123DE1AC59E1189AF2EC7A7DC1C`
+- [Cycle 6 denied install remains absent](evidence/issue-6/gv6-cycle6-a-denied.png):
+  SHA-256 `3D636FEE64DB613B0E280323EFF9BFBBDA19C3792B05F4A3730782832F46517B`
+- [Cycle 6 full restart restoration](evidence/issue-6/gv6-cycle6-full-restart.png):
+  SHA-256 `CFDBC8F784AEAFF7170668AC7BB3F6E321C48C3C2D651F3DED03A292B73FABF5`
+- [Cycle 6 immediate reopen survives router cleanup](evidence/issue-6/gv6-cycle6-router-reopen.png):
+  SHA-256 `DFB3A4D2D39B93D5D1F91E3B10B9F7142434B0C9C3F046F3A9D257C3981CCD76`
+- [Cycle 6 complete worker stop](evidence/issue-6/gv6-cycle6-worker-stopped.png):
+  SHA-256 `547747F678E827851EB44A4044FF3C8A0AC233DB4396C200852F1CF8AE646408`
 
-The current cycle-5 XML evidence in `evidence/issue-6/` records fixed UI labels for
-A/B extension state, all four ordering races, disable/uninstall isolation, denial
-and retry, activity and screen recreation, bounded worker shutdown, and full restart.
+The current cycle-6 XML evidence in `evidence/issue-6/` records fixed UI labels for
+A/B extension state, the independent History API marker, immediate reopen during
+router cleanup, disable/uninstall isolation, denial and retry, activity and screen
+recreation, bounded worker shutdown, and full restart.
 It contains accessibility attributes such as
 `password="false"`; those attributes are not captured credentials.
 
@@ -287,8 +313,16 @@ ordering. Final emulator review found that router recreation correctly invalidat
 authorization but canceled cleanup, leaving a crash helper. The final red test and
 fix retain authorization invalidation while allowing only the already-started bounded
 subprocess cleanup to finish. Marker install failure paths also release their in-flight
-guard so recovery remains possible. No further issue #6 repair cycle is currently
-authorized.
+guard so recovery remains possible.
+
+The user then authorized repair cycle 6 and standing self-approval for future
+evidence-based `EXHAUSTED` repairs. Cycle 6 bound the Gecko mapping directly to the
+domain `SessionIdentifier`, replaced the duplicate local-storage navigation marker
+with a History API marker, made same-ID version drift revocable without relaxing the
+pinned enable/action identity, and added a process-wide cleanup barrier. A red
+immediate-reopen scenario first reproduced `GV6|loading`; the repair prevents joiners
+from rebroadcasting shutdown and authorizes the latest selection only after the old
+process set is absent.
 
 ## Known limitations and non-claims
 
@@ -296,6 +330,10 @@ authorized.
 - Synthetic markers prove browser-engine and extension-storage boundaries. They do
   not prove authenticated Steam identity, live CSFloat injection, offers, alarms,
   or background tracking.
+- Same-ID unexpected-version revocation is covered by deterministic policy tests and
+  the live controller wiring. No modified or lookalike CSFloat package was installed
+  to manufacture that state; exact-device occurrence remains a recovery-path risk for
+  the human gate and production update policy.
 - Physical-device screen, activity, browser-process, and full-app recreation remain
   required by issue #7.
 - Navigation allowlisting, blocked external handoff, and full browser controls are

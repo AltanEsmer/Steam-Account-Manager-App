@@ -16,10 +16,10 @@ the final compatibility check before any production browser migration may begin.
 
 ## Before you start
 
-- Test exact source commit `bbe36da1aea680354750bd5ab2b7bf0fcc6d763d`.
-- Use `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle5-final\app-debug-1AD629D1.apk`.
-- The APK is 598,777,460 bytes. Its SHA-256 must be
-  `1AD629D1E103A8568F203A92DB465A2236920A884EB51E04157AC970224D92CE`.
+- Test exact source commit `54139b495627e9f0b12eea49ad57caf253dad899`.
+- Use `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle6-final\app-debug-34ED99AA.apk`.
+- The APK is 598,793,844 bytes. Its SHA-256 must be
+  `34ED99AA253B8944539950BB5899D5EFCC4B1B6404E3AD1E3C88E39728BBBCFE`.
 - Run the complete procedure once on the dedicated emulator and once on a supported
   physical Android device running Android 9/API 28 or newer. Record the exact device
   model, Android version, API level, and CPU ABI. Do not use a personal emulator or
@@ -62,8 +62,9 @@ Use the same target throughout one run.
 
 5. Open synthetic slot A.
 
-   Expected: The worker opens, shows slot A fixed `GV-*` markers, and lists the pinned
-   GeckoView and CSFloat metadata.
+   Expected: The worker opens, shows slot A fixed `GV-*` markers including the
+   independent navigation marker `nav=A-history`, and lists the pinned GeckoView and
+   CSFloat metadata.
 
 6. Select **Open public Steam listing**.
 
