@@ -101,11 +101,15 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
         })
         val deadline = System.currentTimeMillis() + 8_000
         fun poll() {
-            if (destroyed || !isCurrent()) return
+            val canComplete = !destroyed && isCurrent()
+            if (!canComplete && !destroyed) return
             terminateAppChildProcesses()
-            if (!workerRunning()) stopped(requestedGeneration)
-            else if (System.currentTimeMillis() >= deadline) {
-                if (switches.timedOut(requestedGeneration)) render("$timeoutCode generation=$requestedGeneration")
+            if (!workerRunning()) {
+                if (canComplete) stopped(requestedGeneration)
+            } else if (System.currentTimeMillis() >= deadline) {
+                if (canComplete && switches.timedOut(requestedGeneration)) {
+                    render("$timeoutCode generation=$requestedGeneration")
+                }
             } else handler.postDelayed(::poll, 200)
         }
         handler.postDelayed(::poll, 200)
@@ -114,7 +118,6 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
     override fun onDestroy() {
         destroyed = true
         switches.invalidate()
-        handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
