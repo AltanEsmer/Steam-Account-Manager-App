@@ -80,6 +80,17 @@ class PrototypeSessionTopologyTest {
     }
 
     @Test
+    fun `latest same-active request supersedes a pending cross-profile switch`() {
+        val switches = ProfileSwitchCoordinator("gv_a")
+        val pendingB = switches.request("gv_b")
+        val latestA = switches.request("gv_a")
+
+        assertTrue(latestA.requiresProcessRestart)
+        assertEquals(null, switches.processDeathObserved(pendingB.generation))
+        assertEquals("gv_a", switches.processDeathObserved(latestA.generation))
+    }
+
+    @Test
     fun `switch timeout fails closed and generations remain monotonic`() {
         val switches = ProfileSwitchCoordinator("gv_a")
         val first = switches.request("gv_b")

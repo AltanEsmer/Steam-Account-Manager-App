@@ -18,6 +18,22 @@ class PrototypeProfileIsolationTest {
     private val context = instrumentation.targetContext
 
     @Test
+    fun latestReopenWinsWhileCrossProfileShutdownIsPending() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        awaitText("GV-ROUTER-READY")
+        click("Open synthetic slot A")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 45_000)
+
+        backToRouter()
+        click("Open synthetic slot B")
+        click("Reopen selected slot")
+
+        SystemClock.sleep(3_000)
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 20_000)
+    }
+
+    @Test
     fun syntheticSlotsRestoreEngineAndExtensionMarkersAcrossRealWorkerLifecycles() {
         val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
         val worker = ComponentName(context, GeckoViewPrototypeActivity::class.java)
