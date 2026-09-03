@@ -27,7 +27,7 @@ class PrototypeProfileIsolationTest {
         )
         awaitText("Reopen selected slot")
         click("Open synthetic slot A")
-        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 45_000)
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
 
         backToRouter()
         click("Open synthetic slot B")
@@ -35,8 +35,15 @@ class PrototypeProfileIsolationTest {
 
         awaitText("GV-ROUTER-READY")
         awaitText("selected=A")
+        click("Reopen selected slot")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
+        SystemClock.sleep(2_000)
+        click("Open synthetic isolation marker")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 10_000)
+        backToRouter()
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
         awaitNoAppChildProcesses(10_000)
-        awaitText("selected=A")
     }
 
     @Test
@@ -47,7 +54,7 @@ class PrototypeProfileIsolationTest {
         )
         awaitText("Reopen selected slot")
         click("Open synthetic slot A")
-        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 45_000)
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
 
         backToRouter()
         click("Open synthetic slot B")
@@ -66,14 +73,14 @@ class PrototypeProfileIsolationTest {
         )
         awaitText("Reopen selected slot")
         click("Open synthetic slot B")
-        awaitText("GV6|slot=B|cookie=B|local=B|idb=B|nav=B", 45_000)
+        awaitText("GV6|slot=B|cookie=B|local=B|idb=B|nav=B-history", 45_000)
 
         backToRouter()
         click("Stop worker process")
         click("Reopen selected slot")
 
         SystemClock.sleep(3_000)
-        awaitText("GV6|slot=B|cookie=B|local=B|idb=B|nav=B", 20_000)
+        awaitText("GV6|slot=B|cookie=B|local=B|idb=B|nav=B-history", 20_000)
         backToRouter()
         click("Stop worker process")
         awaitText("GV-WORKER-STOPPED", 30_000)
@@ -87,14 +94,14 @@ class PrototypeProfileIsolationTest {
         )
         awaitText("Reopen selected slot")
         click("Open synthetic slot A")
-        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 45_000)
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
 
         backToRouter()
         click("Open synthetic slot B")
         click("Reopen selected slot")
 
         SystemClock.sleep(3_000)
-        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 20_000)
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 20_000)
         backToRouter()
         click("Stop worker process")
         awaitText("GV-WORKER-STOPPED", 30_000)
@@ -112,7 +119,7 @@ class PrototypeProfileIsolationTest {
         )
         awaitText("Reopen selected slot")
         click("Open synthetic slot A")
-        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 30_000)
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
         ensureMarkerEnabled("A")
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
         awaitText("GV-MARKER-STATE-ENABLED slot=A")
@@ -121,12 +128,12 @@ class PrototypeProfileIsolationTest {
             instrumentation.uiAutomation.rootInActiveWindow?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
         }
         click("Recreate worker activity")
-        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 30_000)
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
 
         backToRouter()
         click("Reopen selected slot")
-        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 30_000)
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
 
         click("Disable issue6 marker")
@@ -134,14 +141,14 @@ class PrototypeProfileIsolationTest {
 
         backToRouter()
         click("Open synthetic slot B")
-        awaitText("GV6|slot=B|cookie=B|local=B|idb=B|nav=B", 45_000)
+        awaitText("GV6|slot=B|cookie=B|local=B|idb=B|nav=B-history", 45_000)
         ensureMarkerEnabled("B")
         awaitText("GV-MARKER-RESULT slot=B prior=B current=B", 30_000)
         awaitText("GV-MARKER-STATE-ENABLED slot=B")
 
         backToRouter()
         click("Open synthetic slot A")
-        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A", 45_000)
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
         awaitText("GV-MARKER-STATE-DISABLED slot=A")
         click("Enable issue6 marker")
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)

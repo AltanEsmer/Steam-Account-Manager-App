@@ -1,5 +1,6 @@
 package com.steamaccountmanager.app.prototype
 
+import com.steamaccountmanager.app.domain.model.SessionIdentifier
 import java.nio.file.Path
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,22 +12,34 @@ import org.junit.Test
 class PrototypeSessionTopologyTest {
     @Test
     fun `profile ID is deterministic opaque and collision resistant`() {
-        val profile = geckoProfileId("account-a", "steam-community")
+        val profile = geckoProfileId(SessionIdentifier("account-a", "steam-community"))
 
-        assertEquals(profile, geckoProfileId("account-a", "steam-community"))
+        assertEquals(profile, geckoProfileId(SessionIdentifier("account-a", "steam-community")))
         assertTrue(profile.matches(Regex("gv_[0-9a-f]{64}")))
-        assertNotEquals(profile, geckoProfileId("steam-community", "account-a"))
-        assertNotEquals(geckoProfileId("a", "bc"), geckoProfileId("ab", "c"))
+        assertNotEquals(profile, geckoProfileId(SessionIdentifier("steam-community", "account-a")))
+        assertNotEquals(
+            geckoProfileId(SessionIdentifier("a", "bc")),
+            geckoProfileId(SessionIdentifier("ab", "c")),
+        )
     }
 
     @Test
     fun `profile ID handles unicode empty and formerly sanitized collisions`() {
-        assertNotEquals(geckoProfileId("å", "網站"), geckoProfileId("a", "網站"))
-        assertNotEquals(geckoProfileId("", "steam"), geckoProfileId("steam", ""))
-        assertNotEquals(geckoProfileId("a/b", "steam"), geckoProfileId("ab", "steam"))
         assertNotEquals(
-            geckoProfileId("x".repeat(48) + "a", "steam"),
-            geckoProfileId("x".repeat(48) + "b", "steam"),
+            geckoProfileId(SessionIdentifier("å", "網站")),
+            geckoProfileId(SessionIdentifier("a", "網站")),
+        )
+        assertNotEquals(
+            geckoProfileId(SessionIdentifier("", "steam")),
+            geckoProfileId(SessionIdentifier("steam", "")),
+        )
+        assertNotEquals(
+            geckoProfileId(SessionIdentifier("a/b", "steam")),
+            geckoProfileId(SessionIdentifier("ab", "steam")),
+        )
+        assertNotEquals(
+            geckoProfileId(SessionIdentifier("x".repeat(48) + "a", "steam")),
+            geckoProfileId(SessionIdentifier("x".repeat(48) + "b", "steam")),
         )
     }
 
@@ -35,8 +48,8 @@ class PrototypeSessionTopologyTest {
         val pairs = (1..3).flatMap { account ->
             (1..4).map { website -> "account-$account" to "website-$website" }
         }
-        val firstPass = pairs.map { (account, website) -> geckoProfileId(account, website) }
-        val secondPass = pairs.map { (account, website) -> geckoProfileId(account, website) }
+        val firstPass = pairs.map { (account, website) -> geckoProfileId(SessionIdentifier(account, website)) }
+        val secondPass = pairs.map { (account, website) -> geckoProfileId(SessionIdentifier(account, website)) }
 
         assertEquals(12, firstPass.toSet().size)
         assertEquals(firstPass, secondPass)
@@ -46,7 +59,7 @@ class PrototypeSessionTopologyTest {
     @Test
     fun `profile path must remain contained by profile root`() {
         val root = Path.of("prototype-profiles").toAbsolutePath().normalize()
-        val contained = root.resolve(geckoProfileId("a", "steam"))
+        val contained = root.resolve(geckoProfileId(SessionIdentifier("a", "steam")))
 
         assertEquals(contained, requireContainedProfilePath(root, contained))
         assertThrows(IllegalArgumentException::class.java) {
@@ -141,8 +154,8 @@ class PrototypeSessionTopologyTest {
 
     @Test
     fun `extension operations require matching profile request and fresh observed state`() {
-        val profileA = geckoProfileId("a", "steam")
-        val profileB = geckoProfileId("b", "steam")
+        val profileA = geckoProfileId(SessionIdentifier("a", "steam"))
+        val profileB = geckoProfileId(SessionIdentifier("b", "steam"))
         val extensions = ProfileExtensionState(profileA)
 
         ExtensionOperation.entries.forEach { operation ->
@@ -159,7 +172,7 @@ class PrototypeSessionTopologyTest {
 
     @Test
     fun `denied reinstall remains absent and stale completion cannot affect newer request`() {
-        val profile = geckoProfileId("a", "steam")
+        val profile = geckoProfileId(SessionIdentifier("a", "steam"))
         val extensions = ProfileExtensionState(profile, ExtensionPresence.ABSENT)
         val denied = extensions.begin(ExtensionOperation.REINSTALL)
 
@@ -174,8 +187,8 @@ class PrototypeSessionTopologyTest {
 
     @Test
     fun `extension state is keyed to selected opaque profile only`() {
-        val profileA = geckoProfileId("a", "steam")
-        val profileB = geckoProfileId("b", "steam")
+        val profileA = geckoProfileId(SessionIdentifier("a", "steam"))
+        val profileB = geckoProfileId(SessionIdentifier("b", "steam"))
         val extensions = ProfileExtensionState(profileA, ExtensionPresence.DISABLED)
         val request = extensions.begin(ExtensionOperation.ENABLE)
 

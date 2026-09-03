@@ -80,6 +80,13 @@ class PrototypeContractTest {
     }
 
     @Test
+    fun `revocation targets the CSFloat ID across versions but enable remains pinned`() {
+        assertTrue(isCsfloatRevocationTarget(CSFLOAT_ID))
+        assertFalse(isCsfloatRevocationTarget("other@example.invalid"))
+        assertFalse(isEnabledExpectedExtension(CSFLOAT_ID, "5.17.1", true))
+    }
+
+    @Test
     fun `cached action reuse requires fresh exact enabled same identity validation`() {
         assertTrue(
             canReuseValidatedAction(
