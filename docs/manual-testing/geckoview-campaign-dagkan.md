@@ -16,10 +16,10 @@ the final compatibility check before any production browser migration may begin.
 
 ## Before you start
 
-- Test exact source commit `54139b495627e9f0b12eea49ad57caf253dad899`.
-- Use `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle6-final\app-debug-34ED99AA.apk`.
-- The APK is 598,793,844 bytes. Its SHA-256 must be
-  `34ED99AA253B8944539950BB5899D5EFCC4B1B6404E3AD1E3C88E39728BBBCFE`.
+- Test exact source commit `803acd1001455a3722c13991daabf4741201d706`.
+- Use `C:\Users\esmer\AppData\Local\Temp\sam-gv6-issue7-cycle7-final\app-debug-6E4E7CED.apk`.
+- The APK is 598,793,996 bytes. Its SHA-256 must be
+  `6E4E7CED8C7CE1039D39A7D7B394C56445A626C398708DC9A1DC6D368A5A1275`.
 - Run the complete procedure once on the dedicated emulator and once on a supported
   physical Android device running Android 9/API 28 or newer. Record the exact device
   model, Android version, API level, and CPU ABI. Do not use a personal emulator or
