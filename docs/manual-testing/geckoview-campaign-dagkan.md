@@ -36,7 +36,10 @@ inside GeckoView. Browser state and extension state are stored separately for te
 slots A and B, and only the selected slot's browser process remains active. This is
 the final compatibility check before any production browser migration may begin.
 
-## Historical prerequisites — blocked pending a newly verified build
+## Before you start
+
+**Historical prerequisites only — blocked pending a newly verified build. Do not
+run the old APK below now.**
 
 - Test exact source commit `b81eeab10ee0554850f51ff9702052ce96ddba19`.
 - Use `C:\Users\esmer\AppData\Local\Temp\sam-gv7-navigation-repair-b81eeab\app-debug-4A5FF6D7.apk`.

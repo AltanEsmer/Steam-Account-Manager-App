@@ -10,6 +10,32 @@ The primary's first full instrumentation run passed 16/16; its repeat passed onl
 passing run is not current acceptance evidence. Issue #7 has no `GO`; production
 issue #8 and subsequent migration work remain blocked.
 
+### Exact primary validation receipt for 1dc8802
+
+Both commands used these environment settings:
+
+```powershell
+$env:ANDROID_HOME = 'C:\Users\esmer\AppData\Local\Android\Sdk'
+$env:ANDROID_SERIAL = 'emulator-5580'
+./gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug lintDebug connectedDebugAndroidTest processReleaseMainManifest mergeReleaseAssets --rerun-tasks
+./gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' connectedDebugAndroidTest --rerun
+```
+
+- First command: exit 0; 43 unit tests and 16 instrumentation tests passed;
+  lint reported 0 errors and 123 warnings. Preserved run-1 XML timestamp:
+  `2026-09-03T19:15:21`.
+- Repeat command: exit 1; 14/16 instrumentation tests passed. Preserved run-2
+  XML timestamp: `2026-09-03T19:21:04`.
+- Preserved directory: `C:\Users\esmer\AppData\Local\Temp\sam-gv7-final-1dc8802`
+  contains the run-1 XML, `instrumentation-run-2.xml`, and `app-debug.apk`.
+- Run-2 XML SHA-256:
+  `EFCBB627D4EBAE2ABC19474F10971E0769FE972F3E4FE1EF4E7AC70101918FEB`.
+- Preserved `app-debug.apk` SHA-256:
+  `60858B5691882E042DDB23EBC754F6CCD10356DD3D070E1B88AE8D609925E769`.
+
+These artifacts describe that checkpoint, not a newly accepted final build. No
+current-head medium/xhigh review pass has been accepted, and no `GO` is recorded.
+
 Narrowed diagnostics on that source reproduced a later reinstall stall: installation
 reported enabled 1.5, but the synthetic background had no `script-enter` phase and
 the marker remained waiting. Earlier worker restarts did enter the background and
