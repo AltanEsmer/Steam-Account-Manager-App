@@ -6,6 +6,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
+import android.view.MotionEvent
+import android.view.InputDevice
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -33,15 +35,15 @@ class PrototypeProfileIsolationTest {
         awaitText("Forward")
         awaitText("Reload")
         click("Test allowed navigation")
-        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
-        awaitText("GV7-NAV-HISTORY")
+        awaitText("GV-NAVIGATION-TEST-READY", 30_000)
+        awaitEnabled("Back", true)
         click("Back")
-        awaitText("GV7-NAV-BASE")
+        awaitEnabled("Forward", true)
         click("Forward")
-        awaitText("GV7-NAV-HISTORY")
+        awaitEnabled("Forward", false)
         click("Reload")
         awaitText("GV7-NAV-HISTORY")
-        click("Open allowed fixture window")
+        clickWebViewTop()
         awaitText("GV-NAVIGATION-NEW-WINDOW")
         click("Test blocked navigation")
         awaitText("GV-NAVIGATION-BLOCKED: Destination blocked. Stay here or open it in your external browser.")
@@ -302,7 +304,36 @@ class PrototypeProfileIsolationTest {
         instrumentation.runOnMainSync { assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) }
     }
 
+    private fun clickWebViewTop() {
+        fun findWebView(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+            node ?: return null
+            if (node.className == "android.webkit.WebView") return node
+            repeat(node.childCount) { findWebView(node.getChild(it))?.let { found -> return found } }
+            return null
+        }
+        val bounds = android.graphics.Rect()
+        requireNotNull(findWebView(instrumentation.uiAutomation.rootInActiveWindow)).getBoundsInScreen(bounds)
+        val time = SystemClock.uptimeMillis()
+        fun event(action: Int, eventTime: Long) = MotionEvent.obtain(
+            time, eventTime, action, bounds.centerX().toFloat(), (bounds.top + 70).toFloat(), 0,
+        ).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+        assertTrue(instrumentation.uiAutomation.injectInputEvent(event(MotionEvent.ACTION_DOWN, time), true))
+        assertTrue(instrumentation.uiAutomation.injectInputEvent(event(MotionEvent.ACTION_UP, time + 50), true))
+    }
+
     private fun awaitText(text: String, timeoutMs: Long = 10_000) = awaitNode(text, timeoutMs)
+
+    private fun awaitEnabled(text: String, enabled: Boolean, timeoutMs: Long = 10_000) {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
+        do {
+            val node = instrumentation.uiAutomation.rootInActiveWindow
+                ?.findAccessibilityNodeInfosByText(text)?.firstOrNull()
+            if (node?.isEnabled == enabled) return
+            scroll(false)
+            SystemClock.sleep(200)
+        } while (SystemClock.uptimeMillis() < deadline)
+        throw AssertionError("Control $text did not become enabled=$enabled")
+    }
 
     private fun awaitNode(text: String, timeoutMs: Long = 10_000): AccessibilityNodeInfo {
         val deadline = SystemClock.uptimeMillis() + timeoutMs

@@ -1,6 +1,7 @@
 package com.steamaccountmanager.app.prototype
 
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
 import android.app.Dialog
 import android.content.Intent
 import android.net.Uri
@@ -37,6 +38,7 @@ import java.util.concurrent.Executors
 class GeckoViewPrototypeActivity : ComponentActivity() {
     private lateinit var runtime: GeckoRuntime
     private lateinit var session: GeckoSession
+    private lateinit var geckoView: GeckoView
     private lateinit var status: TextView
     private lateinit var installButton: Button
     private lateinit var trackingStatus: TextView
@@ -49,6 +51,8 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private lateinit var extensionState: TextView
     private lateinit var markerExtensionState: TextView
     private lateinit var navigationStatus: TextView
+    private lateinit var backButton: Button
+    private lateinit var forwardButton: Button
     private lateinit var stayButton: Button
     private lateinit var openExternalButton: Button
     private lateinit var slot: String
@@ -69,6 +73,64 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private var markerMutationInFlight = false
     private var csfloatMutationInFlight = false
     private var blockedExternalUri: Uri? = null
+    private var forceMissingExternalHandler = false
+    private var navigationTestLoading = false
+    private var pendingNewSession: GeckoSession? = null
+
+    private val navigationDelegate = object : GeckoSession.NavigationDelegate {
+        override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+            backButton.isEnabled = canGoBack
+        }
+
+        override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
+            forwardButton.isEnabled = canGoForward
+        }
+
+        override fun onLocationChange(
+            session: GeckoSession,
+            url: String?,
+            perms: List<GeckoSession.PermissionDelegate.ContentPermission>,
+            hasUserGesture: Boolean,
+        ) {
+            when (url) {
+                prototypeFixtureUri(slot) -> navigationStatus.text = "GV7-NAV-BASE"
+                "${prototypeFixtureUri(slot)}#$slot-history" -> navigationStatus.text = "GV7-NAV-HISTORY"
+                else -> return
+            }
+            navigationStatus.visibility = TextView.VISIBLE
+        }
+
+        override fun onLoadRequest(
+            session: GeckoSession,
+            request: GeckoSession.NavigationDelegate.LoadRequest,
+        ): GeckoResult<AllowOrDeny> {
+            val allowed = isPrototypeNavigationAllowed(request.uri, slot)
+            if (!allowed) runOnUiThread { showBlockedNavigation(request.uri) }
+            return GeckoResult.fromValue(if (allowed) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
+        }
+
+        override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
+            if (!isPrototypeNavigationAllowed(uri, slot)) {
+                runOnUiThread { showBlockedNavigation(uri) }
+                return null
+            }
+            val next = GeckoSession().also(::configureSession)
+            pendingNewSession = next
+            Handler(Looper.getMainLooper()).post {
+                if (isDestroyed || pendingNewSession !== next) return@post
+                geckoView.releaseSession()
+                runtime.webExtensionController.setTabActive(session, false)
+                this@GeckoViewPrototypeActivity.session = next
+                pendingNewSession = null
+                geckoView.setSession(next)
+                runtime.webExtensionController.setTabActive(next, true)
+                session.close()
+                navigationStatus.text = "GV-NAVIGATION-NEW-WINDOW"
+                navigationStatus.visibility = TextView.VISIBLE
+            }
+            return GeckoResult.fromValue(next)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -143,7 +205,17 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             visibility = Button.GONE
             setOnClickListener {
                 blockedExternalUri?.let { uri ->
-                    startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
+                    val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+                    if (forceMissingExternalHandler) intent.setPackage(MISSING_BROWSER_PACKAGE)
+                    try {
+                        startActivity(intent)
+                    } catch (_: ActivityNotFoundException) {
+                        navigationStatus.text = PROTOTYPE_EXTERNAL_HANDOFF_UNAVAILABLE_MESSAGE
+                        blockedExternalUri = null
+                        openExternalButton.visibility = Button.GONE
+                    } finally {
+                        forceMissingExternalHandler = false
+                    }
                 }
             }
         }
@@ -152,20 +224,33 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             visibility = Button.GONE
             setOnClickListener { clearBlockedNavigation() }
         }
+        backButton = button("Back") { session.goBack() }.apply { isEnabled = false }
+        forwardButton = button("Forward") { session.goForward() }.apply { isEnabled = false }
         val metadata = TextView(this).apply {
             text = ARTIFACT_METADATA
             setPadding(24, 8, 24, 12)
             setTextIsSelectable(true)
         }
-        val geckoView = GeckoView(this)
+        geckoView = GeckoView(this)
         val controls = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(status)
-                addView(button("Back") { session.goBack() })
-                addView(button("Forward") { session.goForward() })
-                addView(button("Reload") { session.reload() })
-                addView(button("Test allowed navigation") { loadSyntheticMarker() })
+                addView(backButton)
+                addView(forwardButton)
+                addView(button("Reload") {
+                    navigationStatus.text = "GV-NAVIGATION-RELOADING"
+                    navigationStatus.visibility = TextView.VISIBLE
+                    session.reload()
+                })
+                addView(button("Test allowed navigation") {
+                    navigationTestLoading = true
+                    loadSyntheticMarker()
+                })
                 addView(button("Test blocked navigation") { session.loadUri(BLOCKED_TEST_URL) })
+                addView(button("Test unavailable external handoff") {
+                    forceMissingExternalHandler = true
+                    showBlockedNavigation(BLOCKED_TEST_URL)
+                })
                 addView(navigationStatus)
                 addView(stayButton)
                 addView(openExternalButton)
@@ -234,32 +319,9 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         }
         runtime.webExtensionController.promptDelegate = InstallConsentPrompt()
         session = GeckoSession().apply {
-            navigationDelegate = object : GeckoSession.NavigationDelegate {
-                override fun onLoadRequest(
-                    session: GeckoSession,
-                    request: GeckoSession.NavigationDelegate.LoadRequest,
-                ): GeckoResult<AllowOrDeny> {
-                    val allowed = isPrototypeNavigationAllowed(request.uri, slot)
-                    if (!allowed) runOnUiThread { showBlockedNavigation(request.uri) }
-                    return GeckoResult.fromValue(if (allowed) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
-                }
-            }
-            progressDelegate = object : GeckoSession.ProgressDelegate {
-                override fun onPageStop(session: GeckoSession, success: Boolean) {
-                    if (!success) runOnUiThread {
-                        status.text = PrototypeDiagnostic.PAGE_LOAD_FAILED.message
-                    }
-                }
-            }
-            contentDelegate = object : GeckoSession.ContentDelegate {
-                override fun onTitleChange(session: GeckoSession, title: String?) {
-                    if (title?.matches(Regex("^GV6\\|slot=[AB]\\|cookie=[AB]\\|local=[AB]\\|idb=[AB]\\|nav=[AB]-history$")) == true) {
-                        runOnUiThread { engineStatus.text = title }
-                    }
-                }
-            }
+            configureSession(this)
             open(runtime)
-            loadUri("http://127.0.0.1:$LOOPBACK_PORT/slot/$slot")
+            loadUri(prototypeFixtureUri(slot))
         }
         geckoView.setSession(session)
         runtime.webExtensionController.setTabActive(session, true)
@@ -283,6 +345,8 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         runtime.webExtensionController.promptDelegate = null
         runtime.webExtensionController.setTabActive(session, false)
         session.close()
+        pendingNewSession?.takeIf { it !== session }?.close()
+        pendingNewSession = null
         super.onDestroy()
     }
 
@@ -292,7 +356,31 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     private fun loadSyntheticMarker() {
-        session.loadUri("http://127.0.0.1:$LOOPBACK_PORT/slot/$slot")
+        session.loadUri(prototypeFixtureUri(slot))
+    }
+
+    private fun configureSession(target: GeckoSession) {
+        target.navigationDelegate = navigationDelegate
+        target.progressDelegate = object : GeckoSession.ProgressDelegate {
+            override fun onPageStop(session: GeckoSession, success: Boolean) = runOnUiThread {
+                if (!success) status.text = PrototypeDiagnostic.PAGE_LOAD_FAILED.message
+                else if (navigationTestLoading) {
+                    navigationTestLoading = false
+                    navigationStatus.text = "GV-NAVIGATION-TEST-READY"
+                    navigationStatus.visibility = TextView.VISIBLE
+                }
+                else if (navigationStatus.text == "GV-NAVIGATION-RELOADING") {
+                    navigationStatus.text = "GV-NAVIGATION-RELOADED"
+                }
+            }
+        }
+        target.contentDelegate = object : GeckoSession.ContentDelegate {
+            override fun onTitleChange(session: GeckoSession, title: String?) {
+                if (title?.matches(Regex("^GV6\\|slot=[AB]\\|cookie=[AB]\\|local=[AB]\\|idb=[AB]\\|nav=[AB]-history$")) == true) {
+                    runOnUiThread { engineStatus.text = title }
+                }
+            }
+        }
     }
 
     private fun showBlockedNavigation(rawUri: String) {
@@ -945,6 +1033,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         const val STEAM_LISTING_URL =
             "https://steamcommunity.com/market/listings/730/AK-47%20%7C%20Redline%20%28Field-Tested%29"
         const val BLOCKED_TEST_URL = "https://example.invalid/issue-7-redacted-test"
+        const val MISSING_BROWSER_PACKAGE = "com.steamaccountmanager.missing.browser"
         const val CSFLOAT_XPI_URL =
             "https://addons.mozilla.org/firefox/downloads/file/4957680/csgofloat-5.17.0.xpi"
         const val CSFLOAT_NAME = "CSFloat Market Checker"
@@ -962,15 +1051,22 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
 
 const val PROTOTYPE_NAVIGATION_BLOCKED_MESSAGE =
     "GV-NAVIGATION-BLOCKED: Destination blocked. Stay here or open it in your external browser."
+const val PROTOTYPE_EXTERNAL_HANDOFF_UNAVAILABLE_MESSAGE =
+    "GV-EXTERNAL-HANDOFF-UNAVAILABLE: No external browser can open this destination. Stay here."
+
+fun prototypeFixtureUri(slot: String) = "http://127.0.0.1:$LOOPBACK_PORT/slot/$slot"
 
 fun isPrototypeNavigationAllowed(rawUri: String, slot: String): Boolean {
-    val fixture = "http://127.0.0.1:$LOOPBACK_PORT/slot/$slot"
-    if (rawUri == fixture) return true
     val uri = try {
         URI(rawUri)
     } catch (_: Exception) {
         return false
     }
+    val fixture = URI(prototypeFixtureUri(slot))
+    if (uri.scheme == fixture.scheme && uri.host == fixture.host && uri.port == fixture.port &&
+        uri.path == fixture.path && uri.rawQuery == null && uri.userInfo == null &&
+        (uri.rawFragment == null || uri.rawFragment == "$slot-history")
+    ) return true
     if (!uri.scheme.equals("https", ignoreCase = true) || uri.userInfo != null) return false
     val steam = BuiltInWebsites.STEAM
     return WebsitePolicy(steam.domain, steam.allowedAuthDomains).isHostAllowed(uri.host)
@@ -1020,10 +1116,10 @@ private object PrototypeLoopbackServer {
         return true
     }
 
-    private fun page(slot: String) = """<!doctype html><meta charset=utf-8><body><h1>Issue 6 synthetic slot $slot</h1><pre id=o>GV6|loading</pre><script>
+    private fun page(slot: String) = """<!doctype html><meta charset=utf-8><body style="padding-top:160px"><a style="position:fixed;top:0;left:0;width:100%;height:140px" href="${prototypeFixtureUri(slot)}#$slot-history" target="_blank">Open allowed fixture window</a><h1>Issue 6 synthetic slot $slot</h1><pre id=o>GV6|loading</pre><script>
 const s='$slot'; if(!document.cookie.includes('gv6='))document.cookie='gv6='+s+'; SameSite=Strict';
 if(!localStorage.gv6)localStorage.gv6=s;
-const expected=s+'-history';if(!history.state?.gv6)history.replaceState({gv6:expected},'',location.pathname+'#'+expected);const n=history.state?.gv6||'missing';
+const expected=s+'-history';if(!location.hash)location.hash=expected;if(!history.state?.gv6)history.replaceState({gv6:expected},'',location.href);const n=history.state?.gv6||'missing';
 const q=indexedDB.open('gv6',1);q.onupgradeneeded=()=>q.result.createObjectStore('m');q.onsuccess=()=>{const d=q.result.transaction('m','readwrite').objectStore('m');const g=d.get('slot');g.onsuccess=()=>{const prior=g.result||s;if(!g.result)d.put(s,'slot');const c=(document.cookie.match(/gv6=([AB])/)||[])[1]||'missing';const l=localStorage.gv6||'missing';const text=`GV6|slot=${'$'}{s}|cookie=${'$'}{c}|local=${'$'}{l}|idb=${'$'}{prior}|nav=${'$'}{n}`;document.title=text;document.getElementById('o').textContent=text;};};
 </script></body>"""
 }
