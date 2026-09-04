@@ -435,9 +435,7 @@ class PrototypeProfileIsolationTest {
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
         awaitText("GV-MARKER-STATE-ENABLED slot=A")
 
-        instrumentation.runOnMainSync {
-            instrumentation.uiAutomation.rootInActiveWindow?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-        }
+        instrumentation.uiAutomation.rootInActiveWindow?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
         click("Recreate worker activity")
         awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
@@ -539,7 +537,7 @@ class PrototypeProfileIsolationTest {
 
     private fun click(text: String) {
         val node = awaitNode(text)
-        instrumentation.runOnMainSync { assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) }
+        assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
     }
 
     private fun clickDescription(description: String) {
@@ -550,7 +548,7 @@ class PrototypeProfileIsolationTest {
             return null
         }
         val node = requireNotNull(findClickable(instrumentation.uiAutomation.rootInActiveWindow))
-        instrumentation.runOnMainSync { assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) }
+        assertTrue(node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
     }
 
     private fun awaitText(text: String, timeoutMs: Long = 10_000) = awaitNode(text, timeoutMs)
@@ -585,7 +583,11 @@ class PrototypeProfileIsolationTest {
             }
             collect(instrumentation.uiAutomation.rootInActiveWindow)
         }
-        throw AssertionError("Fixed prototype marker was not visible: $text; visible=$visibleCodes")
+        val failedRoot = instrumentation.uiAutomation.rootInActiveWindow
+        val mainStack = android.os.Looper.getMainLooper().thread.stackTrace.take(20)
+            .joinToString(" | ") { it.toString() }
+        throw AssertionError("Fixed prototype marker was not visible: $text; visible=$visibleCodes; " +
+            "rootNull=${failedRoot == null}; rootPackage=${failedRoot?.packageName}; rootClass=${failedRoot?.className}; mainStack=$mainStack")
     }
 
     private fun scroll(forward: Boolean) {
