@@ -69,6 +69,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     private var pendingPopupRequestId: Long? = null
     private var markerExtension: WebExtension? = null
     private var markerPort: WebExtension.Port? = null
+    private var markerReadPort: WebExtension.Port? = null
     private val markerButtons = mutableListOf<Button>()
     private var csfloatMutationInFlight = false
     private var blockedExternalUri: Uri? = null
@@ -331,6 +332,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         clearActionDelegates()
         markerPort?.setDelegate(RETIRED_MARKER_PORT_DELEGATE)
         markerPort = null
+        markerReadPort = null
         if (ownsRuntime()) markerExtension?.setMessageDelegate(null, MARKER_NATIVE_APP)
         markerExtension = null
         if (ownsRuntime()) {
@@ -428,6 +430,14 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         }
     }
 
+    private fun readVerifiedMarker() {
+        val port = markerPort ?: return
+        if (!ownsRuntime() || pendingMarker != null || shutdownRequested ||
+            markerExtension?.metaData?.enabled != true || markerReadPort === port) return
+        markerReadPort = port
+        port.postMessage(JSONObject().put("type", "read").put("slot", slot))
+    }
+
     private val markerMessageDelegate = object : WebExtension.MessageDelegate {
         override fun onConnect(port: WebExtension.Port) {
             if (!ownsRuntime()) return
@@ -443,7 +453,8 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             port.setDelegate(object : WebExtension.PortDelegate {
                 override fun onPortMessage(message: Any, port: WebExtension.Port) {
                     if (!ownsRuntime()) return
-                    if (port !== markerPort || message !is JSONObject || message.optString("type") != "result") {
+                    if (port !== markerPort || port !== markerReadPort || pendingMarker != null) return
+                    if (message !is JSONObject || message.optString("type") != "result") {
                         withCurrentActivity { markerStatus.text = "GV-MARKER-SCHEMA-REJECTED slot=$slot" }
                         return
                     }
@@ -458,9 +469,10 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 }
                 override fun onDisconnect(port: WebExtension.Port) {
                     if (port === markerPort) markerPort = null
+                    if (port === markerReadPort) markerReadPort = null
                 }
             })
-            port.postMessage(JSONObject().put("type", "read").put("slot", slot))
+            readVerifiedMarker()
         }
     }
 
@@ -950,6 +962,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 it.markerStatus.text = "GV-MARKER-WAIT slot=${it.slot}"
                 it.markerPort?.setDelegate(RETIRED_MARKER_PORT_DELEGATE)
                 it.markerPort = null
+                it.markerReadPort = null
             }
             val controller = runtime.webExtensionController
             var expectedEnabled: Boolean? = null
@@ -963,6 +976,17 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 }
                 // geckoViewAddons native messaging is privileged only for this non-shipping synthetic fixture.
                 when {
+                    exact != null && exact.metaData.version == MARKER_VERSION && exact.metaData.enabled &&
+                        operation in setOf("discover", "enable", "reinstall") -> {
+                        checkedMarker(exact)
+                        bindCurrentMarker(runtime, exact)
+                        controller.disable(exact, WebExtensionController.EnableSource.APP).then { disabled ->
+                            val stopped = checkedMarker(disabled)
+                            bindCurrentMarker(runtime, stopped)
+                            controller.enable(stopped, WebExtensionController.EnableSource.APP)
+                                .map { checkedMarker(it).also { enabled -> check(enabled.metaData.enabled) { "Marker restart failed" } } }
+                        }
+                    }
                     operation == "reinstall" -> controller.ensureBuiltIn(
                         "resource://android/assets/issue6-marker/", MARKER_EXTENSION_ID,
                     ).map { checkedMarker(it).also { installed -> bindCurrentMarker(runtime, installed) } }
@@ -979,14 +1003,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                             "enable" -> controller.enable(exact, WebExtensionController.EnableSource.APP)
                                 .map { checkedMarker(it).also { enabled -> check(enabled.metaData.enabled) { "Marker enable failed" } } }
                             "uninstall" -> controller.uninstall(exact).map { null }
-                            "discover" -> if (exact.metaData.enabled) {
-                                controller.disable(exact, WebExtensionController.EnableSource.APP).then { disabled ->
-                                    val stopped = checkedMarker(disabled)
-                                    bindCurrentMarker(runtime, stopped)
-                                    controller.enable(stopped, WebExtensionController.EnableSource.APP)
-                                        .map { checkedMarker(it).also { enabled -> check(enabled.metaData.enabled) { "Marker restart failed" } } }
-                                }
-                            } else GeckoResult.fromValue(exact)
+                            "discover" -> GeckoResult.fromValue(exact)
                             else -> GeckoResult.fromException(IllegalArgumentException("Unknown marker operation"))
                         }
                     }
@@ -1003,17 +1020,22 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             chain.accept(
                 { extension ->
                     if (sharedRuntime === runtime && pendingMarker === gate) {
+                        pendingMarker = null
                         currentActivity?.takeIf { it.runtime === runtime && !it.isDestroyed }?.let {
                             it.renderMarkerState(extension)
+                            it.readVerifiedMarker()
                             it.markerButtons.forEach { button -> button.isEnabled = !shutdownRequested }
                         }
-                        pendingMarker = null
                     }
                     gate.complete(extension)
                 },
                 { error ->
                     if (sharedRuntime === runtime && pendingMarker === gate) {
                         currentActivity?.takeIf { it.runtime === runtime && !it.isDestroyed }?.let {
+                            it.markerPort?.setDelegate(RETIRED_MARKER_PORT_DELEGATE)
+                            it.markerPort = null
+                            it.markerReadPort = null
+                            it.markerExtension = null
                             it.markerExtensionState.text = "GV-MARKER-STATE-FAILED slot=${it.slot} profile=${it.profileId}"
                             it.markerButtons.forEach { button -> button.isEnabled = !shutdownRequested }
                         }
