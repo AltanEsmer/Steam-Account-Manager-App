@@ -184,6 +184,91 @@ class PrototypeProfileIsolationTest {
     }
 
     @Test
+    fun alreadyEnabledMarkerOperationsProduceFreshResults() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        awaitNoAppChildProcesses(10_000)
+        click("Open synthetic slot A")
+        ensureMarkerEnabled("A")
+        awaitText("version=1.5", 30_000)
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+
+        click("Enable issue6 marker")
+        awaitText("GV-MARKER-STATE-ENABLED slot=A", 30_000)
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+        click("Reinstall issue6 marker (synthetic only)")
+        awaitText("GV-MARKER-STATE-ENABLED slot=A", 30_000)
+        awaitText("version=1.5", 30_000)
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+    }
+
+    @Test
+    fun interruptedMarkerRestartCompletesBeforeWorkerShutdown() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        awaitNoAppChildProcesses(10_000)
+        click("Open synthetic slot A")
+        ensureMarkerEnabled("A")
+        awaitText("version=1.5", 30_000)
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+        repeat(3) {
+            backToRouter()
+            click("Reopen selected slot")
+            click("Close worker screen")
+            awaitText("Reopen selected slot")
+            click("Stop worker process")
+            awaitText("GV-WORKER-STOPPED", 30_000)
+            awaitNoAppChildProcesses(10_000)
+            click("Reopen selected slot")
+            awaitText("GV-MARKER-STATE-ENABLED slot=A", 30_000)
+            awaitText("version=1.5", 30_000)
+            awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+        }
+    }
+
+    @Test
+    fun explicitMarkerDisablePersistsAfterInterruptedReopen() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        awaitNoAppChildProcesses(10_000)
+        click("Open synthetic slot A")
+        ensureMarkerEnabled("A")
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+        backToRouter()
+        click("Reopen selected slot")
+        click("Close worker screen")
+        awaitText("Reopen selected slot")
+        click("Reopen selected slot")
+        awaitEnabled("Disable issue6 marker", true)
+        click("Disable issue6 marker")
+        awaitText("GV-MARKER-STATE-DISABLED slot=A", 30_000)
+        backToRouter()
+        click("Reopen selected slot")
+        awaitText("GV-MARKER-STATE-DISABLED slot=A", 30_000)
+        backToRouter()
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        awaitNoAppChildProcesses(10_000)
+        click("Reopen selected slot")
+        awaitText("GV-MARKER-STATE-DISABLED slot=A", 30_000)
+    }
+
+    @Test
     fun markerRemainsEnabledAfterInterruptedScreenReopens() {
         val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
         context.startActivity(
