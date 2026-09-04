@@ -1,26 +1,23 @@
 # GeckoView campaign manual testing for Dagkan
 
-## Current status: INCOMPLETE / STAGNATED — do not run the old APK
+## Device-test release check
 
-Machine validation at source `1dc8802bc91e3f232580c607b5b114d36f12113e` is not
-repeatable: the primary's full run passed 16/16 once, then only 14/16 with engine-load
-and synthetic marker failures. Narrowing found no background entry after reinstall;
-a diagnostics-free experimental repair then failed uninstall persistence in
-116.596 seconds and was removed. See the [latest receipt](../verification/geckoview-issue-7-emulator-run.md)
-for source attribution and safe local logs. No `GO` exists and production issue #8
-remains blocked.
+This procedure describes candidate `9e254b2aa8715e3e3703b80e91302cd6db531e21`.
+Its metadata is not approval to install or test it. Before starting, check the latest
+PR receipt and obtain an explicit device-test release for this exact APK. Without
+that release, stop. Never substitute the rejected `17026da` or historical `b81eeab`
+APK. Machine evidence and repair history are maintained in the receipt, not inferred
+from this procedure.
+The [receipt](../verification/geckoview-issue-7-emulator-run.md) preserves the failed
+baseline, rejected experiments, native port-race evidence, and exact candidate artifacts.
 
-Do not install or test the historical `b81eeab` APK below now. The retained procedure
-and metadata are historical preparation, not authorization or a current passing
-build. Resume only after Codex supplies a newly verified exact build and explicitly
-reopens the device gate; all acceptance criteria below remain required.
-
-Codex gathers the emulator, build, APK-hash, automated-test, and safe technical
-screenshot/log evidence. When the device gate is reopened, the user supplies only
-the prescribed device-only observed PASS/FAIL results, device model/Android version,
-and reauthentication notes. Do not send credentials, cookies, tokens, account
-identifiers, trade/payment content, or authenticated screenshots. Missing evidence
-remains incomplete rather than being inferred from emulator results.
+Codex owns APK checksum verification and emulator/build/test/technical screenshot
+evidence. After explicit release of the device gate, the user supplies observed
+PASS/FAIL outcomes, Samsung model/Android version, and reauthentication notes only.
+Credentials are entered only on the test device, never sent to agents. A phone pass
+does not replace the emulator's live authentication and two-account proof.
+Full emulator and physical-device evidence and official maintainer/reviewer
+acknowledgement of issue #7 `GO` are required before production #8.
 
 This is the living human-test guide for the GeckoView migration campaign. Run only
 the gate whose APK metadata is complete. A gate passes only when every required
@@ -38,16 +35,18 @@ the final compatibility check before any production browser migration may begin.
 
 ## Before you start
 
-**Historical prerequisites only — blocked pending a newly verified build. Do not
-run the old APK below now.**
+**Do not start without the latest receipt's explicit release for this exact build.**
 
-- Test exact source commit `b81eeab10ee0554850f51ff9702052ce96ddba19`.
-- Use `C:\Users\esmer\AppData\Local\Temp\sam-gv7-navigation-repair-b81eeab\app-debug-4A5FF6D7.apk`.
-- The APK is 598,810,380 bytes. Its SHA-256 must be
-  `4A5FF6D78B1B9FF75343B2D0681FF473F29A935C811FE3B5DC63F1EE99610755`.
+- Candidate source: `9e254b2aa8715e3e3703b80e91302cd6db531e21` (app source unchanged from `c8f3be7`).
+- Codex preserves and verifies `C:\Users\esmer\AppData\Local\Temp\sam-gv7-final-9e254b2\app-debug.apk`.
+- Size: 598,810,380 bytes; SHA-256:
+  `D6E639CF0F69915BB065FE2904B112C8A63AA9A426CDE7A5B8EDB9977E32DA89`.
+  No PowerShell or checksum work is required from the user.
+- Samsung model and Android version: awaiting the user's confirmation.
 - Run the complete procedure once on the dedicated emulator and once on a supported
-  physical Android device running Android 9/API 28 or newer. Record the exact device
-  model, Android version, API level, and CPU ABI. Do not use a personal emulator or
+  physical Android device running Android 9/API 28 or newer. Codex records the
+  emulator's API level and CPU ABI. For the phone, share its exact model and Android
+  version; include API/ABI only if already known. Do not use a personal emulator or
   clear a physical device that you do not own for this test.
 - Use two dedicated Steam test accounts, called A and B only in the evidence. Neither
   account may have a payment method or valuable inventory. Never type authentication
@@ -59,201 +58,723 @@ run the old APK below now.**
   `https://addons.mozilla.org/firefox/downloads/file/4957680/csgofloat-5.17.0.xpi`.
   The XPI SHA-256 is
   `70C540B8B1DF125596EF615FE37028542DE4D92B3816AD81EB6AD5CE3D11798D`.
+- If a safe page with observable injection/tracking is unavailable, mark the required
+  proof INCOMPLETE. Use an existing test inventory or trade page; never purchase,
+  create, accept, or modify a trade for this test.
 - Do not run against a valuable account. Do not intentionally create, accept, or
   modify a trade. Observe tracking/status only with harmless test-account data.
 
 ## Steps
 
-Perform steps 1–33 on the emulator, then repeat steps 1–33 on the physical device.
-Use the same target throughout one run.
+After explicit release, use this procedure on the dedicated emulator and the
+supported physical device. Codex handles technical evidence; the user records only
+observations. Do not infer one target's result from the other.
 
-1. Verify the APK checksum with PowerShell `Get-FileHash -Algorithm SHA256 <path>`.
+Every switch, recreation, and reopen initially loads the synthetic fixture, not the
+previous authenticated page. Perform the nested live checks below before assigning
+PASS. Do not infer live browser or extension storage from fixed markers. If required
+live state or tracking/alarm behavior cannot be observed safely, mark it INCOMPLETE;
+never provide identifying authentication screenshots.
 
-   Expected: The checksum exactly matches the value in **Before you start**.
+1. Wait for Codex to explicitly release the device gate and supply the verified APK.
 
-2. Install that APK on the current target without installing any other campaign APK.
+   Expected: Independent validation is accepted and the supplied APK matches the receipt; otherwise stop.
+
+2. Install the supplied debug APK on your own approved test device.
 
    Expected: Android installs the debug app successfully.
 
-3. Clear only the debug app's storage from Android Settings.
+3. Clear only this debug app's storage in Android Settings.
 
-   Expected: The debug app returns to a clean first-run state; no other app or device
-   data is changed.
+   Expected: The debug app starts clean; no other app or device data changes.
 
-4. Open the launcher named **Gecko profile isolation prototype**.
+4. Open **Gecko profile isolation prototype**.
 
-   Expected: The router shows `GV-ROUTER-READY`, slot A and B controls, a reopen
-   control, and a worker-stop control. This is GV-01.
+   Expected: The router shows fixed ready, A/B selection, reopen, and worker-stop controls (GV-01).
 
 5. Open synthetic slot A.
 
-   Expected: The worker opens, shows slot A fixed `GV-*` markers including the
-   independent navigation marker `nav=A-history`, and lists the pinned GeckoView and
-   CSFloat metadata.
+   Expected: A's engine marker includes nav=A-history; pinned engine and extension metadata are visible.
 
 6. Select **Open public Steam listing**.
 
-   Expected: The public Steam market listing opens in GeckoView before authentication.
+   Expected: The public listing loads inside GeckoView.
 
-7. Select **Review and install CSFloat**, then choose **Deny** on the consent prompt.
+7. Select **Review and install CSFloat**.
 
-   Expected: The prompt names CSFloat, the exact ID/version, and all required access
-   including Steam API host access; denial leaves `GV-CSFLOAT-STATE-ABSENT slot=A`
-   with a safe explanation and an enabled retry. This covers GV-05 and GV-06.
+   Expected: The consent prompt identifies official CSFloat and all required permissions, including Steam API host access (GV-05).
 
-8. Select **Reinstall CSFloat with consent**, review the prompt again, and choose
-   **Accept**.
+8. Choose **Deny**.
 
-   Expected: GeckoView reports the exact official signed ID/version as enabled for
-   slot A without claiming a separate optional-runtime permission. This covers GV-02
-   and GV-07.
+   Expected: A remains CSFloat-absent with a safe explanation and retry available (GV-06).
 
-9. Sign in to Steam account A only inside the visible Steam page.
+9. Select **Reinstall CSFloat with consent**.
 
-   Expected: Steam completes its normal interactive authentication, including Steam
-   Guard if required. The prototype never asks for, echoes, or logs the credentials.
-   This is GV-03.
+   Expected: The complete consent prompt appears again.
 
-10. Navigate to the harmless public listing or an appropriate test-account inventory
-   page where CSFloat normally appears.
+10. Choose **Accept**.
 
-   Expected: The page remains inside GeckoView and shows recognizable CSFloat-added
-   content such as float/wear information. This is GV-04.
+   Expected: Official signed CSFloat 5.17.0 becomes enabled only for A; no separate optional-runtime permission is claimed (GV-02, GV-07).
 
-11. Select **Open official CSFloat action**.
+11. Sign in to Steam test account A inside the Steam page.
 
-    Expected: The real CSFloat popup opens, rather than an app-made imitation.
+   Expected: Normal authentication and Steam Guard complete without app interception or credential logging (GV-03).
 
-12. Use the official popup's normal control to enable offer tracking without creating
-    or accepting a trade.
+12. Open a harmless existing test inventory or trade page.
 
-    Expected: The popup visibly reports tracking enabled for test account A.
+   Expected: Recognizable CSFloat injection appears inside GeckoView (GV-04).
 
-13. Close the popup and select **Record visible official status**.
+13. Select **Open official CSFloat action**.
 
-    Expected: The prototype records a visible active status only after the official
-    popup was shown. This is GV-08.
+   Expected: The real official popup opens, not an app-made substitute.
 
-14. Return to the router and open synthetic slot B.
+14. Enable tracking using the popup's normal control.
 
-    Expected: The prior worker closes before B opens; B is signed out of account A,
-    B's synthetic markers differ, and CSFloat is absent. No A identity or page state
-    appears.
+   Expected: Official tracking status is enabled for A without creating, accepting, or modifying trades.
 
-15. Install CSFloat in slot B by reviewing and accepting its independent prompt.
+15. Close the popup.
 
-    Expected: CSFloat becomes enabled only in B; B required its own informed consent.
+   Expected: The selected A page remains visible.
 
-16. Sign in to Steam account B only inside the visible Steam page.
+16. Select **Record visible official status**.
 
-    Expected: B authenticates normally and no account A identity appears.
+   Expected: Active status is recorded only after the official popup was shown (GV-08).
 
-17. Open an appropriate page and enable tracking from the official CSFloat popup for
-    account B.
+17. Return to the router.
 
-    Expected: CSFloat injection and the official enabled tracking status are visible
-    for B without revealing A. This completes the live portion of GV-11.
+   Expected: The A worker screen closes safely.
 
-18. Switch A → B → A → B → A with the router controls.
+18. Open synthetic slot B.
 
-    Expected: Each slot restores only its own Steam authentication, visible identity,
-    page/storage marker, CSFloat install state, extension storage, and tracking state.
-    No process-timeout message or cross-account flash appears. This covers GV-11 and
-    GV-12.
+   Expected: B shows distinct fixed synthetic markers and CSFloat is absent. This fixture does not show Steam identity.
 
-19. In slot A, select **Disable CSFloat**.
+   1. Select **Open public Steam listing**.
 
-    Expected: A changes to `GV-CSFLOAT-STATE-DISABLED slot=A`; injection and tracking
-    stop for A.
+      Expected: B is not authenticated as A before B's independent installation or login.
 
-20. Open slot B.
+19. Select **Review and install CSFloat** in B.
 
-    Expected: B remains signed into B with CSFloat and tracking enabled. A's revoke
-    did not change B. This is part of GV-13.
+   Expected: B shows its own complete permission prompt.
 
-21. Return to A, select **Enable CSFloat**, then confirm the relevant page and popup.
+20. Choose **Accept** in B.
 
-    Expected: Only A returns to enabled/injected/tracking-capable state; B remains
-    unchanged. This is part of GV-14.
+   Expected: CSFloat becomes enabled only after B's independent consent.
 
-22. In A, select **Uninstall CSFloat**.
+21. Sign in to Steam test account B inside the Steam page.
 
-    Expected: A changes to `GV-CSFLOAT-STATE-ABSENT slot=A`; injection and tracking
-    are absent for A.
+   Expected: B authenticates normally without any A identity.
 
-23. Open B once more.
+22. Open a harmless existing B test inventory or trade page.
 
-    Expected: B is still independently authenticated with CSFloat enabled and its
-    prior tracking state intact. This completes GV-13.
+   Expected: CSFloat injection is visible for B.
 
-24. Return to A, select **Reinstall CSFloat with consent**, choose **Deny**, then use
-    the same control again and choose **Accept**.
+23. Select **Open official CSFloat action** in B.
 
-    Expected: Denial leaves A absent, the retry repeats the full consent, acceptance
-    restores only A, and B stays unchanged. This completes GV-14.
+   Expected: The official popup belongs to B.
 
-25. While A is open, rotate the device or otherwise trigger Android activity
-    recreation without clearing app data.
+24. Enable tracking in B's official popup.
 
-    Expected: A restores the correct authentication, CSFloat state, tracking state,
-    page marker, and extension marker without a duplicate install prompt.
+   Expected: B's own tracking state becomes visible without revealing A (GV-11).
 
-26. Select **Close worker screen**, then select **Reopen selected slot** in the router.
+   1. Close the popup.
 
-    Expected: A restores the same state after screen close/reopen. This is GV-09.
+      Expected: B's page remains visible before switching.
 
-27. Select **Stop worker process** in the router, wait for `GV-WORKER-STOPPED`, then
-    select **Reopen selected slot**.
+25. Open slot A through the router.
 
-    Expected: Stop completes without a timeout, and A restores the correct isolated
-    profile after a new worker starts.
+   Expected: The A fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
 
-28. Fully stop the debug app from Android Settings, then launch **Gecko profile
-    isolation prototype** and select **Reopen selected slot**.
+   1. Select **Open public Steam listing**.
 
-    Expected: A is still selected and restores its authentication, CSFloat install,
-    injection, and tracking/alarm state without showing B. This is GV-10.
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
 
-29. Repeat the activity recreation, screen close/reopen, worker stop/reopen, and full
-    app restart with B selected.
+   2. Open a harmless existing test inventory or trade page.
 
-    Expected: Every transition restores B only, no A identity appears, and any failure
-    is recoverable. This completes the lifecycle matrix.
+      Expected: Real CSFloat injection is visible for A. Do not create or modify trades or make purchases.
 
-30. Follow an allowed Steam authentication redirect or link within the configured
-    Steam site.
+   3. Select **Open official CSFloat action**.
 
-    Expected: Allowed Steam pages and authentication redirects load in-app.
+      Expected: The official popup shows A's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
 
-31. While an allowed page is loaded, select **Test blocked navigation**, choose
-    **Stay here**, then repeat and choose **Open in external browser**. Also use
-    **Test unavailable external handoff** and choose **Open in external browser**.
+   4. Close the popup.
 
-    Expected: The fixed unrelated destination does not load in the embedded browser;
-    the current page remains visible, the message contains no destination details, and
-    an external browser opens only after the explicit choice. If it opens in-app, opens
-    externally without confirmation, or no external choice exists, mark GV-15 `FAIL`.
-    The unavailable-handler fixture must instead show the fixed recoverable
-    `GV-EXTERNAL-HANDOFF-UNAVAILABLE` state without exposing the destination.
+      Expected: The selected A page remains visible.
 
-32. Exercise normal back, forward, and reload behavior on the allowed fixture, then
-    activate **Open allowed fixture window**.
 
-    Expected: Each control behaves predictably and never crosses from A to B. Missing
-    required controls or broken history means GV-15 `FAIL`. The new-window request
-    is routed into the existing selected session in this single-window prototype;
-    an unrelated new-window target remains
-    blocked with the same explicit external-browser choice.
-    Authentication flows using `window.opener`, `postMessage`, or `window.close`
-    still require human verification; same-session routing does not prove them.
+26. Open slot B through the router.
 
-33. Exercise the labeled popup failure and recovery controls, then observe one real
-    recoverable network/load failure if it occurs naturally.
+   Expected: The B fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
 
-    Expected: Failures show actionable, non-sensitive diagnostics, never falsely show
-    tracking active, preserve an external-browser recovery path, and recover after a
-    fresh CSFloat query. A natural outage is not required; do not disrupt the device
-    or network to manufacture one. This is GV-16.
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe B's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for B. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows B's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected B page remains visible.
+
+
+27. Open slot A through the router.
+
+   Expected: The A fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for A. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows A's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected A page remains visible.
+
+
+28. Open slot B through the router.
+
+   Expected: The B fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe B's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for B. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows B's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected B page remains visible.
+
+
+29. Open slot A through the router.
+
+   Expected: The A fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for A. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows A's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected A page remains visible.
+
+
+30. Select **Disable CSFloat** in A.
+
+   Expected: A reports CSFloat disabled. Verify revocation on a real page and unavailable action below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: CSFloat injection is absent after revocation. Do not create or modify trades or make purchases.
+
+   3. Inspect the disabled/unavailable **Open official CSFloat action** control.
+
+      Expected: Access remains unavailable; do not attempt to open an inactive popup. Tracking must not be reported active.
+
+
+31. Open B through the router.
+
+   Expected: The B fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe B's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for B. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows B's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected B page remains visible.
+
+
+32. Return to A through the router.
+
+   Expected: A's fixture returns and CSFloat remains disabled.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: CSFloat injection is absent after revocation. Do not create or modify trades or make purchases.
+
+   3. Inspect the disabled/unavailable **Open official CSFloat action** control.
+
+      Expected: Access remains unavailable; do not attempt to open an inactive popup. Tracking must not be reported active.
+
+
+33. Select **Enable CSFloat**.
+
+   Expected: Only A regains access; B is unchanged.
+
+34. Open A's harmless existing test inventory or trade page.
+
+   Expected: A's injection is restored.
+
+35. Open A's official CSFloat action.
+
+   Expected: A's official tracking-capable state is restored (GV-14).
+
+   1. Close the popup.
+
+      Expected: A's page is visible before uninstall.
+
+36. Select **Uninstall CSFloat** in A.
+
+   Expected: A reports CSFloat absent. Verify removal on a real page and unavailable action below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: CSFloat injection is absent after revocation. Do not create or modify trades or make purchases.
+
+   3. Inspect the disabled/unavailable **Open official CSFloat action** control.
+
+      Expected: Access remains unavailable; do not attempt to open an inactive popup. Tracking must not be reported active.
+
+
+37. Open B through the router.
+
+   Expected: The B fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe B's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for B. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows B's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected B page remains visible.
+
+
+38. Return to A through the router.
+
+   Expected: A's fixture returns and CSFloat remains absent.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: CSFloat injection is absent after revocation. Do not create or modify trades or make purchases.
+
+   3. Inspect the disabled/unavailable **Open official CSFloat action** control.
+
+      Expected: Access remains unavailable; do not attempt to open an inactive popup. Tracking must not be reported active.
+
+
+39. Select **Reinstall CSFloat with consent**.
+
+   Expected: Full consent is requested again.
+
+40. Choose **Deny**.
+
+   Expected: A stays absent.
+
+41. Select **Reinstall CSFloat with consent** again.
+
+   Expected: Full consent is repeated on retry.
+
+42. Choose **Accept**.
+
+   Expected: A's installation is restored (GV-14). Uninstall is not required to preserve tracking storage; establish a new tracking baseline before lifecycle checks.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: A's correct authentication is visible.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for A.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: A's official popup opens.
+
+   4. Enable tracking through the official popup.
+
+      Expected: The official popup confirms A's enabled tracking baseline without any trade operation.
+
+   5. Close the popup.
+
+      Expected: A's page remains visible.
+
+   6. Select **Record visible official status**.
+
+      Expected: The app records the status just observed, not an inferred tracking state.
+
+43. Rotate the device with A selected.
+
+   Expected: The A fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for A. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows A's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected A page remains visible.
+
+
+44. Select **Close worker screen**.
+
+   Expected: The router appears without a crash.
+
+45. Select **Reopen selected slot**.
+
+   Expected: The A fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for A. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows A's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected A page remains visible.
+
+
+46. Return to the router.
+
+   Expected: The selected slot remains A.
+
+47. Select **Stop worker process**.
+
+   Expected: GV-WORKER-STOPPED appears without a timeout.
+
+48. Select **Reopen selected slot**.
+
+   Expected: The A fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for A. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows A's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected A page remains visible.
+
+
+49. Fully stop the debug app in Android Settings.
+
+   Expected: The app stops without clearing its data.
+
+50. Launch **Gecko profile isolation prototype**.
+
+   Expected: The router still selects A.
+
+51. Select **Reopen selected slot**.
+
+   Expected: The A fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe A's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for A. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows A's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Observe an official post-restart tracking/status update.
+
+      Expected: An observable official update supports GV-10 background/tracking behavior. A saved toggle or app badge alone is insufficient. If no update is observable, mark this proof INCOMPLETE; do not invent a timing deadline or force a trade.
+
+   5. Close the popup.
+
+      Expected: The selected A page remains visible.
+
+
+52. Open B through the router.
+
+   Expected: The B fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe B's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for B. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows B's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected B page remains visible.
+
+
+53. Rotate the device with B selected.
+
+   Expected: The B fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe B's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for B. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows B's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected B page remains visible.
+
+
+54. Select **Close worker screen**.
+
+   Expected: The router appears without a crash.
+
+55. Select **Reopen selected slot**.
+
+   Expected: The B fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe B's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for B. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows B's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected B page remains visible.
+
+
+56. Return to the router.
+
+   Expected: B remains selected.
+
+57. Select **Stop worker process**.
+
+   Expected: GV-WORKER-STOPPED appears without timeout.
+
+58. Select **Reopen selected slot**.
+
+   Expected: The B fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe B's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for B. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows B's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Close the popup.
+
+      Expected: The selected B page remains visible.
+
+
+59. Fully stop the debug app in Android Settings.
+
+   Expected: The app stops without clearing its data.
+
+60. Launch **Gecko profile isolation prototype**.
+
+   Expected: B remains selected.
+
+61. Select **Reopen selected slot**.
+
+   Expected: The B fixture and correct extension access metadata return without a crash, cross-slot marker, timeout, or duplicate consent. Verify live state separately below.
+
+   1. Select **Open public Steam listing**.
+
+      Expected: Observe B's own Steam authentication, never the other account. Record any reauthentication requirement; fixture markers alone prove no live identity.
+
+   2. Open a harmless existing test inventory or trade page.
+
+      Expected: Real CSFloat injection is visible for B. Do not create or modify trades or make purchases.
+
+   3. Select **Open official CSFloat action**.
+
+      Expected: The official popup shows B's expected prior tracking/access state. An app-recorded status or synthetic marker is not a substitute.
+
+   4. Observe an official post-restart tracking/status update.
+
+      Expected: An observable official update supports GV-10 background/tracking behavior. A saved toggle or app badge alone is insufficient. If no update is observable, mark this proof INCOMPLETE; do not invent a timing deadline or force a trade.
+
+   5. Close the popup.
+
+      Expected: The selected B page remains visible.
+
+
+62. Follow an allowed Steam authentication redirect or link.
+
+   Expected: It remains in-app; check any flow relying on window.opener, postMessage or window.close explicitly.
+
+63. Select **Test blocked navigation**.
+
+   Expected: The unrelated destination is not loaded; a fixed redacted message offers Stay here and explicit external opening.
+
+64. Choose **Stay here**.
+
+   Expected: The current allowed page remains in the embedded browser.
+
+65. Select **Test blocked navigation** again.
+
+   Expected: The same redacted offer returns without auto-opening anything.
+
+66. Choose **Open in external browser**.
+
+   Expected: Only this explicit choice opens the unrelated destination externally (GV-15).
+
+67. Select **Test unavailable external handoff** after returning to the prototype.
+
+   Expected: The fixed blocked-state choice is shown.
+
+68. Choose **Open in external browser**.
+
+   Expected: GV-EXTERNAL-HANDOFF-UNAVAILABLE appears with recoverable stay behavior and no destination details.
+
+69. Select **Open synthetic isolation marker**.
+
+   Expected: The selected slot's base fixture loads.
+
+   1. Select **Test allowed navigation**.
+
+      Expected: The distinct allowed fixture page loads.
+
+70. Select **Back**.
+
+   Expected: The previous allowed fixture page returns without crossing slots.
+
+71. Select **Forward**.
+
+   Expected: The next allowed fixture page returns.
+
+72. Select **Reload**.
+
+   Expected: The same allowed fixture page reloads correctly.
+
+73. Activate **Open allowed fixture window**.
+
+   Expected: The allowed target loads in the selected session: this prototype is single-window, not proof of opener/postMessage/window.close semantics.
+
+74. Activate **Open blocked fixture window**.
+
+   Expected: The denied new-window target remains blocked with explicit external choice (GV-15).
+
+75. Select **Open public Steam listing**.
+
+   Expected: The selected slot has a real Steam-page context before opening the official popup.
+
+   1. Select **Open official CSFloat action**.
+
+      Expected: The enabled selected slot's official popup opens.
+
+   2. Close the popup.
+
+      Expected: The action state is ready; **Simulate popup failure (test only)** is available. If not, mark the precondition INCOMPLETE, not a simulated failure pass.
+
+   3. Select **Simulate popup failure (test only)**.
+
+      Expected: A fixed non-sensitive popup failure is visible, tracking is not falsely active, and **Recover and rediscover CSFloat** becomes available.
+
+76. Choose **Open public Steam listing in external browser** while the recovery error is visible.
+
+   Expected: Only this tap opens the fixed public listing externally, without copying the embedded login URL, cookies, or session state. The external browser has its own authentication state; this is not proof of CSFloat tracking there.
+
+77. Return to the prototype using Android Back.
+
+   Expected: The selected slot remains isolated and its recovery controls remain available.
+
+78. Select **Recover and rediscover CSFloat**.
+
+   Expected: A fresh query restores the ready action state for the enabled official extension; the earlier error was not already recovered before this click.
+
+   1. Record any naturally occurring network/load failure.
+
+      Expected: Recovery remains actionable and safe; if none occurs mark this observation NOT RUN, not a fabricated pass. Do not manufacture an outage.
 
 ## If it fails
 
@@ -271,28 +792,35 @@ treated as `GO`.
 
 ## Evidence to share
 
-Share a compact record with:
+Codex supplies the exact commit/APK size/hash, pinned engine/official extension
+metadata, emulator environment, automated results, and safe technical screenshots
+or bounded logs. The user does not run shell commands or collect browser storage.
 
-- `PASS`, `FAIL`, or `INCOMPLETE` for every GV-01 through GV-16 on the emulator and
-  physical device;
-- exact APK commit, size, and checksum;
-- emulator AVD/API/Android/ABI and physical device model/API/Android/ABI;
-- GeckoView version and CSFloat source, ID, version, signature state, and checksum;
-- UTC test window and a short non-sensitive note for every failed or retried step;
-- `PASS` or `FAIL` for screen, activity, browser-process, and full-app recreation;
-- representative APK-size and memory observations if available;
-- whether either safe account required reauthentication after each lifecycle event;
-- redacted screenshots containing only the relevant app/extension state; and
-- a maintainer statement of `I acknowledge this evidence and recommend GO` or
-  `I acknowledge this evidence and recommend NO-GO`.
+After phone-test release, fill in this device-only record (A/B labels only):
+
+```text
+Samsung model:
+Android version / API (if known):
+Test time:
+GV-01:        GV-02:        GV-03:        GV-04:
+GV-05:        GV-06:        GV-07:        GV-08:
+GV-09:        GV-10:        GV-11:        GV-12:
+GV-13:        GV-14:        GV-15:        GV-16:
+Use PASS / FAIL / INCOMPLETE for each.
+Activity recreation A:       B:
+Screen close/reopen A:       B:
+Worker stop/reopen A:        B:
+Full app restart A:          B:
+Reauthentication required (A/B, transition only):
+Failed step and safe observed message:
+```
 
 Do not share passwords, Steam Guard codes, QR login screens, cookies, tokens, account names, trades, payment information, or unredacted authentication screenshots.
 
-Use only labels A and B in notes. Crop or redact status bars and any identifying page
-content. Do not export browser storage or full logcat. The independent tester and
-reviewer will check the record before an official decision is requested on issue #7.
-The campaign cannot continue until issue #7 itself records the acknowledged `GO` and
-the repository's required gate transition is complete.
+No identifying authentication screenshots are requested. Codex owns safe technical
+capture; never export browser storage or full logcat. Maintainer/reviewer
+acknowledgement and official issue #7 `GO` are separate required evidence, not a
+user checklist shortcut. Phone observations cannot replace live emulator proof.
 
 ## What this test does not prove
 
