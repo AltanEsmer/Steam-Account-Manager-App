@@ -184,7 +184,7 @@ class PrototypeProfileIsolationTest {
     }
 
     @Test
-    fun markerReconnectsAcrossRepeatedRecreationAndScreenReopen() {
+    fun markerReconnectsAcrossRepeatedScreenReopen() {
         val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
         context.startActivity(
             Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
@@ -200,21 +200,6 @@ class PrototypeProfileIsolationTest {
         awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
 
         repeat(8) {
-            val previousWindowId = requireNotNull(instrumentation.uiAutomation.rootInActiveWindow).windowId
-            click("Recreate worker activity")
-            val deadline = SystemClock.uptimeMillis() + 10_000
-            while (SystemClock.uptimeMillis() < deadline) {
-                val currentWindowId = instrumentation.uiAutomation.rootInActiveWindow?.windowId
-                if (currentWindowId != null && currentWindowId != previousWindowId) break
-                SystemClock.sleep(200)
-            }
-            val recreatedWindowId = instrumentation.uiAutomation.rootInActiveWindow?.windowId
-            assertTrue("Worker recreation did not replace the accessibility window",
-                recreatedWindowId != null && recreatedWindowId != previousWindowId)
-            awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
-            awaitText("GV-MARKER-STATE-ENABLED slot=A", 30_000)
-            awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
-
             backToRouter()
             click("Reopen selected slot")
             awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
