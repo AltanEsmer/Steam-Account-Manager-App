@@ -195,17 +195,8 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             visibility = Button.GONE
             setOnClickListener {
                 blockedExternalUri?.let { uri ->
-                    val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
-                    if (forceMissingExternalHandler) intent.setPackage(MISSING_BROWSER_PACKAGE)
-                    try {
-                        startActivity(intent)
-                    } catch (_: ActivityNotFoundException) {
-                        navigationStatus.text = PROTOTYPE_EXTERNAL_HANDOFF_UNAVAILABLE_MESSAGE
-                        blockedExternalUri = null
-                        openExternalButton.visibility = Button.GONE
-                    } finally {
-                        forceMissingExternalHandler = false
-                    }
+                    openExternal(uri, forceMissingExternalHandler)
+                    forceMissingExternalHandler = false
                 }
             }
         }
@@ -255,6 +246,10 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 addView(recoverButton)
                 addView(button("Open synthetic isolation marker") { loadSyntheticMarker() })
                 addView(button("Open public Steam listing") { session.loadUri(STEAM_LISTING_URL) })
+                addView(button("Open public Steam listing in external browser") {
+                    forceMissingExternalHandler = false
+                    openExternal(Uri.parse(STEAM_LISTING_URL))
+                })
                 addView(button("Recreate worker activity") { recreate() })
                 addView(button("Close worker screen") { finish() })
                 addView(extensionState)
@@ -384,6 +379,27 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun openExternal(uri: Uri, missingHandler: Boolean = false) {
+        if (!isPrototypeExternalHandoffEligible(uri.toString())) return
+        val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+        if (missingHandler) intent.setPackage(MISSING_BROWSER_PACKAGE)
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            showExternalUnavailable()
+        } catch (_: SecurityException) {
+            showExternalUnavailable()
+        }
+    }
+
+    private fun showExternalUnavailable() {
+        navigationStatus.text = PROTOTYPE_EXTERNAL_HANDOFF_UNAVAILABLE_MESSAGE
+        navigationStatus.visibility = TextView.VISIBLE
+        stayButton.visibility = Button.VISIBLE
+        blockedExternalUri = null
+        openExternalButton.visibility = Button.GONE
     }
 
     private fun showBlockedNavigation(rawUri: String) {
