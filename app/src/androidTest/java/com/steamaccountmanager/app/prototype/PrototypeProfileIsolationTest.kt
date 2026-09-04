@@ -37,6 +37,21 @@ class PrototypeProfileIsolationTest {
         awaitText("GV-EXTERNAL-HANDOFF-UNAVAILABLE: No external browser can open this destination. Stay here.")
         awaitEnabled("Open public Steam listing in external browser", true)
         assertTrue(instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString() == context.packageName)
+        val resolved = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+            instrumentation.uiAutomation.executeShellCommand(
+                "cmd package resolve-activity --brief -a android.intent.action.VIEW " +
+                    "-c android.intent.category.BROWSABLE -d ${GeckoViewPrototypeActivity.STEAM_LISTING_URL}",
+            ),
+        ).bufferedReader().use { it.readText() }
+        val browserPackage = resolved.lineSequence().map { it.trim() }
+            .firstOrNull { it.matches(Regex("[A-Za-z0-9_.]+/[A-Za-z0-9_.$]+")) }?.substringBefore('/')
+        assertTrue("A concrete external browser must resolve the public fixture", browserPackage != null && browserPackage != context.packageName && browserPackage != "android")
+        click("Open public Steam listing in external browser")
+        val deadline = SystemClock.uptimeMillis() + 10_000
+        while (instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString() != browserPackage &&
+            SystemClock.uptimeMillis() < deadline) SystemClock.sleep(200)
+        assertTrue("Explicit recovery must open the resolved browser",
+            instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString() == browserPackage)
     }
 
     @Test
