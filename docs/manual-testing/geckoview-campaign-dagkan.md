@@ -128,9 +128,9 @@ never provide identifying authentication screenshots.
 
    Expected: The real official popup opens, not an app-made substitute.
 
-14. Enable tracking using the popup's normal control.
+14. Inspect the official popup's permission-derived state.
 
-   Expected: Official tracking status is enabled for A without creating, accepting, or modifying trades.
+   Expected: With required Steam permission granted, the official Firefox popup displays the disabled “Offer Tracking Enabled” label; do not try to tap it. This label alone does not prove tracking activity. GV-08 still requires a genuine authenticated, observable CSFloat tracking/status update; unavailable proof is INCOMPLETE. Do not create, accept, or modify trades.
 
 15. Close the popup.
 
@@ -138,7 +138,7 @@ never provide identifying authentication screenshots.
 
 16. Select **Record visible official status**.
 
-   Expected: Active status is recorded only after the official popup was shown (GV-08).
+   Expected: The app records the observed popup state only. This app-recorded status is not GV-08 proof by itself and does not replace the required authenticated CSFloat tracking/status update.
 
 17. Return to the router.
 
@@ -172,9 +172,9 @@ never provide identifying authentication screenshots.
 
    Expected: The official popup belongs to B.
 
-24. Enable tracking in B's official popup.
+24. Inspect B's official popup's permission-derived state.
 
-   Expected: B's own tracking state becomes visible without revealing A (GV-11).
+   Expected: The disabled “Offer Tracking Enabled” label reflects B's required Steam permission, not proof of live tracking. Separately require a genuine authenticated CSFloat tracking/status update for B without revealing A; unavailable proof is INCOMPLETE (GV-08, GV-11).
 
    1. Close the popup.
 
@@ -439,9 +439,9 @@ never provide identifying authentication screenshots.
 
       Expected: A's official popup opens.
 
-   4. Enable tracking through the official popup.
+   4. Inspect the official popup's permission-derived state.
 
-      Expected: The official popup confirms A's enabled tracking baseline without any trade operation.
+      Expected: The disabled “Offer Tracking Enabled” label confirms required Steam permission only. Re-establish the live baseline through a genuine authenticated, observable CSFloat tracking/status update before lifecycle checks; unavailable proof is INCOMPLETE. Do not perform trade operations.
 
    5. Close the popup.
 
