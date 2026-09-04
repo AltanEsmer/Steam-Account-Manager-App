@@ -184,6 +184,33 @@ class PrototypeProfileIsolationTest {
     }
 
     @Test
+    fun markerRemainsEnabledAfterInterruptedScreenReopens() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        awaitNoAppChildProcesses(10_000)
+        click("Open synthetic slot A")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
+        ensureMarkerEnabled("A")
+        awaitText("version=1.5", 30_000)
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+
+        backToRouter()
+        repeat(8) {
+            click("Reopen selected slot")
+            click("Close worker screen")
+            awaitText("Reopen selected slot")
+        }
+        click("Reopen selected slot")
+        awaitText("GV-MARKER-STATE-ENABLED slot=A", 30_000)
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+    }
+
+    @Test
     fun markerReconnectsAcrossRepeatedScreenReopen() {
         val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
         context.startActivity(
