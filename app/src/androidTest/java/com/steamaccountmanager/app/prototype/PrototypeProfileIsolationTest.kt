@@ -20,6 +20,26 @@ class PrototypeProfileIsolationTest {
     private val context = instrumentation.targetContext
 
     @Test
+    fun publicSteamExternalRecoveryRemainsAvailableAfterSafeError() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Open synthetic slot A")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
+        awaitEnabled("Open public Steam listing in external browser", true)
+        assertTrue(instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString() == context.packageName)
+
+        click("Test unavailable external handoff")
+        assertTrue(instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString() == context.packageName)
+        click("Open in external browser")
+        awaitText("GV-EXTERNAL-HANDOFF-UNAVAILABLE: No external browser can open this destination. Stay here.")
+        awaitEnabled("Open public Steam listing in external browser", true)
+        assertTrue(instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString() == context.packageName)
+    }
+
+    @Test
     fun navigationGateExposesControlsAndBlocksWithoutAutomaticHandoff() {
         val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
         context.startActivity(
