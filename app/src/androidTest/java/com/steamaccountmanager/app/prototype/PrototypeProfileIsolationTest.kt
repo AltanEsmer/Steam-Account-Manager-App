@@ -184,6 +184,108 @@ class PrototypeProfileIsolationTest {
     }
 
     @Test
+    fun markerReconnectsAcrossRepeatedRecreationAndScreenReopen() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        awaitNoAppChildProcesses(10_000)
+        click("Open synthetic slot A")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
+        ensureMarkerEnabled("A")
+        awaitText("version=1.5", 30_000)
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+
+        repeat(8) {
+            val previousWindowId = requireNotNull(instrumentation.uiAutomation.rootInActiveWindow).windowId
+            click("Recreate worker activity")
+            val deadline = SystemClock.uptimeMillis() + 10_000
+            while (SystemClock.uptimeMillis() < deadline) {
+                val currentWindowId = instrumentation.uiAutomation.rootInActiveWindow?.windowId
+                if (currentWindowId != null && currentWindowId != previousWindowId) break
+                SystemClock.sleep(200)
+            }
+            val recreatedWindowId = instrumentation.uiAutomation.rootInActiveWindow?.windowId
+            assertTrue("Worker recreation did not replace the accessibility window",
+                recreatedWindowId != null && recreatedWindowId != previousWindowId)
+            awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
+            awaitText("GV-MARKER-STATE-ENABLED slot=A", 30_000)
+            awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+
+            backToRouter()
+            click("Reopen selected slot")
+            awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 30_000)
+            awaitText("GV-MARKER-STATE-ENABLED slot=A", 30_000)
+            awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+        }
+    }
+
+    @Test
+    fun markerUninstallRemainsAbsentAfterWorkerStopAndReopen() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        awaitNoAppChildProcesses(10_000)
+        click("Open synthetic slot A")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
+        ensureMarkerEnabled("A")
+        awaitText("version=1.5", 30_000)
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+        click("Uninstall issue6 marker")
+        awaitText("GV-MARKER-STATE-ABSENT slot=A", 30_000)
+
+        backToRouter()
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        awaitNoAppChildProcesses(10_000)
+        click("Reopen selected slot")
+        awaitText("GV-MARKER-STATE-ABSENT slot=A", 45_000)
+        awaitText("GV-MARKER-WAIT slot=A")
+        assertTrue(instrumentation.uiAutomation.rootInActiveWindow
+            ?.findAccessibilityNodeInfosByText("GV-MARKER-RESULT slot=A")?.isEmpty() == true)
+    }
+
+    @Test
+    fun markerReinstallAfterWorkerStopAndReopenProducesFreshResult() {
+        val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
+        context.startActivity(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        awaitNoAppChildProcesses(10_000)
+        click("Open synthetic slot A")
+        awaitText("GV6|slot=A|cookie=A|local=A|idb=A|nav=A-history", 45_000)
+        ensureMarkerEnabled("A")
+        awaitText("version=1.5", 30_000)
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+        click("Uninstall issue6 marker")
+        awaitText("GV-MARKER-STATE-ABSENT slot=A", 30_000)
+
+        backToRouter()
+        click("Stop worker process")
+        awaitText("GV-WORKER-STOPPED", 30_000)
+        awaitNoAppChildProcesses(10_000)
+        click("Reopen selected slot")
+        awaitText("GV-MARKER-STATE-ABSENT slot=A", 45_000)
+        awaitText("GV-MARKER-WAIT slot=A")
+        assertTrue(instrumentation.uiAutomation.rootInActiveWindow
+            ?.findAccessibilityNodeInfosByText("GV-MARKER-RESULT slot=A")?.isEmpty() == true)
+        click("Reinstall issue6 marker (synthetic only)")
+        awaitText("GV-MARKER-STATE-ENABLED slot=A", 30_000)
+        awaitText("version=1.5", 30_000)
+        awaitText("GV-MARKER-RESULT slot=A prior=A current=A", 30_000)
+    }
+
+    @Test
     fun syntheticSlotsRestoreEngineAndExtensionMarkersAcrossRealWorkerLifecycles() {
         val router = ComponentName(context, GeckoPrototypeRouterActivity::class.java)
         val worker = ComponentName(context, GeckoViewPrototypeActivity::class.java)
