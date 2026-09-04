@@ -1036,12 +1036,23 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         private var currentActivity: GeckoViewPrototypeActivity? = null
         var sharedRuntime: GeckoRuntime? = null
         var sharedProfileId: String? = null
+        private var shutdownRequested = false
 
         fun shutdownProcess() {
-            sharedRuntime?.shutdown()
-            sharedRuntime = null
-            sharedProfileId = null
-            Handler(Looper.getMainLooper()).postDelayed({ Process.killProcess(Process.myPid()) }, 500)
+            if (shutdownRequested) return
+            shutdownRequested = true
+            val runtime = sharedRuntime
+            if (runtime == null) {
+                Process.killProcess(Process.myPid())
+                return
+            }
+            // Do not hard-kill before Gecko flushes profile state; the router retains its bounded stop timeout.
+            runtime.delegate = object : GeckoRuntime.Delegate {
+                override fun onShutdown() {
+                    Process.killProcess(Process.myPid())
+                }
+            }
+            runtime.shutdown()
         }
 
         const val STEAM_LISTING_URL =
