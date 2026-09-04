@@ -325,7 +325,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
         }
         closePopup()
         clearActionDelegates()
-        markerPort?.disconnect()
+        markerPort?.setDelegate(RETIRED_MARKER_PORT_DELEGATE)
         markerPort = null
         if (ownsRuntime()) markerExtension?.setMessageDelegate(null, MARKER_NATIVE_APP)
         markerExtension = null
@@ -480,7 +480,7 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
             { extensions -> withCurrentActivity {
                 val exact = extensions.orEmpty().singleOrNull { it.id == MARKER_EXTENSION_ID }
                 if (exact == null) {
-                    markerPort?.disconnect()
+                    markerPort?.setDelegate(RETIRED_MARKER_PORT_DELEGATE)
                     markerPort = null
                     markerExtension?.setMessageDelegate(null, MARKER_NATIVE_APP)
                     markerExtension = null
@@ -1030,6 +1030,9 @@ class GeckoViewPrototypeActivity : ComponentActivity() {
     }
 
     companion object {
+        // Pinned GeckoView 153 can double-close native state when an extension disconnect
+        // races app disconnect(). Let the extension close it; this delegate must not capture an Activity.
+        private val RETIRED_MARKER_PORT_DELEGATE = object : WebExtension.PortDelegate {}
         private var currentActivity: GeckoViewPrototypeActivity? = null
         var sharedRuntime: GeckoRuntime? = null
         var sharedProfileId: String? = null
