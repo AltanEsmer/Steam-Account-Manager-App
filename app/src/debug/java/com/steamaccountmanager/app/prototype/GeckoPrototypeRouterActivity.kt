@@ -105,7 +105,13 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
         if (!cleanupAlreadyPending) {
             processCleanupPending = true
             cleanupId++
-            cleanupDeadline = System.currentTimeMillis() + 8_000
+            val cleanupStartedAt = System.currentTimeMillis()
+            cleanupDeadline = cleanupStartedAt + 8_000
+            cleanupForceWorkerAfter = cleanupStartedAt + 3_000
+            val workerName = "$packageName:gecko_prototype"
+            val capturedWorker = appChildProcesses().singleOrNull { it.processName == workerName }
+            cleanupWorkerPid = capturedWorker?.pid
+            cleanupWorkerName = capturedWorker?.processName
             cleanupProcesses = emptyMap()
             cleanupSnapshotTaken = false
             cleanupWorkerMissingPolls = 0
@@ -130,6 +136,16 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
                 return
             }
             val runningProcesses = appChildProcesses()
+            if (System.currentTimeMillis() >= cleanupForceWorkerAfter) {
+                val capturedPid = cleanupWorkerPid
+                val capturedName = cleanupWorkerName
+                if (capturedPid != null && capturedName != null && appChildProcesses().any {
+                        it.pid == capturedPid && it.processName == capturedName
+                    }
+                ) {
+                    Process.killProcess(capturedPid)
+                }
+            }
             if (!cleanupSnapshotTaken && runningProcesses.none { it.processName == "$packageName:gecko_prototype" }) {
                 cleanupWorkerMissingPolls++
                 if (cleanupWorkerMissingPolls >= 3) {
@@ -212,6 +228,9 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             cleanupProcesses = emptyMap()
             cleanupSnapshotTaken = false
             cleanupWorkerMissingPolls = 0
+            cleanupWorkerPid = null
+            cleanupWorkerName = null
+            cleanupForceWorkerAfter = 0L
         }
     }
 
@@ -227,6 +246,9 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
         private var cleanupProcesses = emptyMap<Int, String>()
         private var cleanupSnapshotTaken = false
         private var cleanupWorkerMissingPolls = 0
+        private var cleanupWorkerPid: Int? = null
+        private var cleanupWorkerName: String? = null
+        private var cleanupForceWorkerAfter = 0L
     }
 }
 
