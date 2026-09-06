@@ -107,7 +107,7 @@ class GeckoPrototypeRouterActivity : ComponentActivity() {
             cleanupId++
             val cleanupStartedAt = System.currentTimeMillis()
             cleanupDeadline = cleanupStartedAt + 8_000
-            cleanupForceWorkerAfter = cleanupStartedAt + 3_000
+            cleanupForceWorkerAfter = cleanupStartedAt + 6_000
             val workerName = "$packageName:gecko_prototype"
             val capturedWorker = appChildProcesses().singleOrNull { it.processName == workerName }
             cleanupWorkerPid = capturedWorker?.pid
