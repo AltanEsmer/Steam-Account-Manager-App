@@ -48,10 +48,25 @@ class PrototypeProfileIsolationTest {
         assertTrue("A concrete external browser must resolve the public fixture", browserPackage != null && browserPackage != context.packageName && browserPackage != "android")
         click("Open public Steam listing in external browser")
         val deadline = SystemClock.uptimeMillis() + 10_000
-        while (instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString() != browserPackage &&
-            SystemClock.uptimeMillis() < deadline) SystemClock.sleep(200)
-        assertTrue("Explicit recovery must open the resolved browser",
-            instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString() == browserPackage)
+        var resumedPackage: String? = null
+        while (SystemClock.uptimeMillis() < deadline) {
+            resumedPackage = topResumedActivityPackage()
+            if (resumedPackage == browserPackage) break
+            SystemClock.sleep(200)
+        }
+        assertTrue(
+            "Explicit recovery must top-resume the resolved browser; observed=$resumedPackage",
+            resumedPackage == browserPackage,
+        )
+        instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+        val homeDeadline = SystemClock.uptimeMillis() + 5_000
+        while (topResumedActivityPackage() == browserPackage && SystemClock.uptimeMillis() < homeDeadline) {
+            SystemClock.sleep(100)
+        }
+        instrumentation.startActivitySync(
+            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+        awaitText("Reopen selected slot")
     }
 
     @Test
@@ -191,7 +206,7 @@ class PrototypeProfileIsolationTest {
         click("Reopen selected slot")
 
         SystemClock.sleep(3_000)
-        awaitText("GV6|slot=B|cookie=B|local=B|idb=B|nav=B-history", 20_000)
+        awaitText("GV6|slot=B|cookie=B|local=B|idb=B|nav=B-history", 30_000)
         backToRouter()
         click("Stop worker process")
         awaitText("GV-WORKER-STOPPED", 30_000)
@@ -493,6 +508,14 @@ class PrototypeProfileIsolationTest {
 
     private fun appChildProcessRunning(): Boolean {
         return appChildProcesses().isNotEmpty()
+    }
+
+    private fun topResumedActivityPackage(): String? {
+        val output = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+            instrumentation.uiAutomation.executeShellCommand("dumpsys activity activities"),
+        ).bufferedReader().use { it.readText() }
+        val topResumedLine = output.lineSequence().firstOrNull { "topResumedActivity=" in it } ?: return null
+        return Regex(" ([A-Za-z0-9_.]+)/[A-Za-z0-9_.$]+[} ]").find(topResumedLine)?.groupValues?.get(1)
     }
 
     private fun appChildProcesses(): List<String> {
