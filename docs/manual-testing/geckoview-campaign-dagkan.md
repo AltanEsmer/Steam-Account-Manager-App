@@ -15,8 +15,10 @@ evidence. After explicit release of the device gate, the user supplies observed
 PASS/FAIL outcomes, Samsung model/Android version, and reauthentication notes only.
 Credentials are entered only on the test device, never sent to agents. A phone pass
 does not replace the emulator's live authentication and two-account proof.
-Issue #7 now records `GO` and is closed. The medium tester review, xhigh GO-basis
-review, and ADR amendment remain required before production #8.
+Issue #7 records `GO` and is closed. Medium tester and fresh xhigh GO-basis reviews
+passed exact checkpoint `062da23946c2f306f5a981c356f67a1da219de8d` with no
+reviewer blockers, and ADR-0001 records the gate decisions. Production #8 is released
+after this finalization is committed and synchronized to the public repository.
 
 This is the living human-test guide for the GeckoView migration campaign. Run only
 the gate whose APK metadata is complete. A gate passes only when every required
@@ -83,8 +85,11 @@ restrictions below continue to apply.
 
 The live issue has a
 [GO comment](https://github.com/D4gkan/Steam-Account-Manager-App/issues/7#issuecomment-5557925973)
-and is closed with maintainer permission relayed in the task. Production #8 remains
-blocked pending the medium tester review, xhigh GO-basis review, and ADR amendment.
+and is closed with maintainer permission relayed in the task. Medium tester and fresh
+xhigh reviewer passes at exact checkpoint `062da23` complete the review basis; the
+xhigh reviewer acknowledged `GO` with no blockers. ADR-0001 records the selected
+architecture. Production #8 is released after the final documentation commit is
+synchronized to the public repository.
 
 ## Steps
 
@@ -855,9 +860,9 @@ user checklist shortcut. Phone observations cannot replace live emulator proof.
   installed size, battery, or performance guarantees.
 - The result does not authorize a modified, repacked, forked, silently authorized, or
   substituted CSFloat package.
-- Human evidence alone does not change ADR-0001 or unblock issue #8. The official
-  repository gate, reviewer acknowledgement, maintainer acknowledgement, and explicit
-  `GO` are still required.
+- This completed prototype gate does not replace the evidence required by production
+  issues #8–#12. Production #8 is released only after the final gate documentation is
+  committed and synchronized to the public repository.
 
 # Issue #8 production Steam-login smoke test
 

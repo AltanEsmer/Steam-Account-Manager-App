@@ -1,6 +1,6 @@
 # ADR-0001: Adopt GeckoView for CSFloat extension support
 
-- **Status:** Accepted with a mandatory compatibility gate
+- **Status:** Accepted after compatibility `GO`
 - **Date:** 2026-09-01
 - **Decision owner:** Steam Account Manager maintainers
 - **Parent issue:** [#3](https://github.com/D4gkan/Steam-Account-Manager-App/issues/3)
@@ -46,6 +46,9 @@ The browser shell remains responsible for:
 GeckoView and the CSFloat extension will be pinned to versions that pass the
 compatibility contract. Either dependency changing is a security-sensitive upgrade
 that requires the contract to be rerun.
+
+The first GeckoView release supports only the official CSFloat extension. Arbitrary
+extensions and an extension marketplace remain out of scope.
 
 ## Mandatory prototype gate
 
@@ -113,28 +116,56 @@ requirements.
 - **Fork or auto-authorize CSFloat:** breaks the official update/signature chain or
   removes informed user consent.
 
-## Decisions the prototype must resolve
+## Compatibility-gate resolutions
 
-The ADR deliberately does not prescribe these before evidence exists:
+Issue #7 recorded `GO` after the complete gate passed on the Android 16/API 36
+`Codex_GeckoView_Campaign_API_36` AVD and a Samsung Galaxy S25 Ultra running Android
+16. The authenticated A/B lifecycle matrix did not require Steam login or Steam
+Guard again after initial authentication. These results select the following
+production direction without copying the disposable prototype's activity or unit
+model wholesale:
 
-- Gecko runtime/profile/process topology per browser session;
-- whether any Gecko context-partitioning mechanism is sufficient for extension
-  storage and permission isolation;
-- runtime and background-extension lifetime across process and app restart;
-- signed package acquisition, signature verification, and update behavior;
-- extension action/popup presentation in the Compose browser shell;
-- exact disable/uninstall and enable/reinstall lifecycle behavior within one isolated
-  browser session;
-- reauthentication messaging and cleanup of obsolete WebView state; and
-- acceptable APK-size, memory, and supported-device impacts.
+- Each `(account, website)` browser session maps deterministically to an opaque,
+  persistent profile stored under app-owned no-backup storage.
+- Only one dedicated Gecko worker and runtime is active at a time. Switching sessions
+  performs bounded shutdown of the old worker and app child processes before the new
+  profile starts.
+- `contextId` alone is rejected as the isolation boundary because extension
+  installation, storage, and enablement are runtime-wide. Profile-local
+  disable/enable and uninstall/reinstall preserve the selected session boundary;
+  reinstall repeats explicit consent.
+- GeckoView is pinned to stable Maven version `153.0.20260810162159`. CSFloat is
+  pinned to the official signed, unmodified Firefox artifact `5.17.0`, extension ID
+  `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}`, observed signed state `2`, from the
+  exact AMO artifact
+  `https://addons.mozilla.org/firefox/downloads/file/4957680/csgofloat-5.17.0.xpi`.
+  Its XPI SHA-256 is
+  `70C540B8B1DF125596EF615FE37028542DE4D92B3816AD81EB6AD5CE3D11798D`.
+- Distribution accepts only that exact official AMO artifact after validating its
+  source, ID, version, signed state, and checksum. Required permissions and origins
+  are shown through explicit callback-derived consent; no permission is granted
+  silently.
+- There is no automatic blind upgrade. Any change to GeckoView, CSFloat, the artifact
+  source, permission manifest, or supported Android range reruns GV-02 through GV-16
+  on an emulator and supported physical device before either pin advances.
 
-The compatibility-gate record must amend this section with the selected behavior or
-link to a follow-up ADR before production work begins.
+The exact debug APK was 598,810,380 bytes versus the 63,099,195-byte upstream
+baseline, a delta of 535,711,185 bytes. Representative debug-only active PSS points
+ranged from 410,523 to 590,931 KiB, with a router-only point of 133,659 KiB. These
+are observations, not release benchmarks or performance guarantees.
+
+The gate does not prove every Android device, long-duration background tracking,
+release download or installed size, battery or production performance, final
+production migration cleanup, or broad multi-window, `window.opener`, `postMessage`,
+and `window.close` compatibility. Those limits remain production verification work.
 
 ## References
 
 - [Issue #3: GeckoView migration decision](https://github.com/D4gkan/Steam-Account-Manager-App/issues/3)
+- [Issue #7: compatibility gate `GO`](https://github.com/D4gkan/Steam-Account-Manager-App/issues/7)
 - [Issue #1: original WebView request](https://github.com/D4gkan/Steam-Account-Manager-App/issues/1)
+- [Issue #7 verification receipt](../verification/geckoview-issue-7-emulator-run.md)
+- [Issue #7 manual test guide](../manual-testing/geckoview-campaign-dagkan.md)
 - [Mozilla: interacting with Web content and WebExtensions](https://firefox-source-docs.mozilla.org/mobile/android/geckoview/consumer/web-extensions.html)
 - [Mozilla: GeckoView extension management](https://firefox-source-docs.mozilla.org/mobile/android/geckoview/design/managing-extensions.html)
 - [Mozilla: WebExtensionController API](https://mozilla.github.io/geckoview/javadoc/mozilla-central/org/mozilla/geckoview/WebExtensionController.html)
