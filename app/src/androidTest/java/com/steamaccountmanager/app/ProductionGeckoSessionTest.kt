@@ -46,7 +46,7 @@ class ProductionGeckoSessionTest {
 
         try {
             stopBrowserWorker(context)
-            clearSyntheticNotices(context, accountA, accountB)
+            clearSyntheticDetectorConsent(context, accountA, accountB)
             server.start()
 
             open(context, accountA, server.url("A"))
@@ -134,12 +134,21 @@ class ProductionGeckoSessionTest {
 
         try {
             stopBrowserWorker(context)
-            clearSyntheticNotices(context, sessionId)
+            clearSyntheticDetectorConsent(context, sessionId)
             server.start()
 
             open(context, sessionId, server.url("DENY"))
             waitForText(automation, "Allow Steam profile detection?")
             assertFalse("Synthetic page loaded before detector consent", hasExactText(automation, pageMarker))
+            clickText(automation, "Allow and continue")
+            waitForText(automation, pageMarker)
+            stopBrowserWorker(context)
+
+            clearSyntheticDetectorConsent(context, sessionId)
+            open(context, sessionId, server.url("DENY"))
+            waitForText(automation, "Allow Steam profile detection?")
+            assertFalse("Previously installed detector activated before renewed consent", hasExactText(automation, pageMarker))
+            assertNoGeckoChildren(context)
             clickText(automation, "Cancel")
             waitForTextToDisappear(automation, "Allow Steam profile detection?")
             assertFalse("Synthetic page appeared after detector consent was denied", hasExactText(automation, pageMarker))
@@ -174,18 +183,31 @@ class ProductionGeckoSessionTest {
         )
     }
 
-    private fun clearSyntheticNotices(
+    private fun clearSyntheticDetectorConsent(
         context: Context,
         vararg sessionIds: SessionIdentifier,
     ) {
-        val editor = context.getSharedPreferences(
+        val preferences = context.getSharedPreferences(
             BrowserActivity.DETECTOR_CONSENT_PREFERENCES,
             Context.MODE_PRIVATE,
-        ).edit()
-        sessionIds.forEach {
-            editor.remove(BrowserActivity.detectorConsentKey(GeckoProfileIdentity.idFor(it)))
+        )
+        val keys = sessionIds.map {
+            BrowserActivity.detectorConsentKey(GeckoProfileIdentity.idFor(it))
         }
-        assertTrue("Could not reset synthetic migration notices", editor.commit())
+        // SharedPreferences caches are process-local. Force a value transition so this
+        // default-process test rewrites consent granted by the stopped :browser process.
+        val primingEditor = preferences.edit()
+        keys.forEach { primingEditor.putBoolean(it, true) }
+        assertTrue("Could not prime synthetic detector consent", primingEditor.commit())
+        val clearingEditor = preferences.edit()
+        keys.forEach { clearingEditor.putBoolean(it, false) }
+        assertTrue("Could not reset synthetic detector consent", clearingEditor.commit())
+    }
+
+    private fun assertNoGeckoChildren(context: Context) {
+        val exactWorker = context.packageName + ":browser"
+        val children = browserProcesses(context).filter { it.processName != exactWorker }
+        assertTrue("Gecko child processes started before renewed detector consent: $children", children.isEmpty())
     }
 
     private suspend fun stopBrowserWorker(context: Context) {
