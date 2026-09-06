@@ -963,7 +963,7 @@ available for other sites and rollback. CSFloat production installation is issue
 
 18. Close the in-app browser.
 
-    Expected: The account screen returns and shows account A's correct current Steam avatar/profile metadata. Mark the run `FAIL` or `INCOMPLETE` if it is absent, remains a placeholder, or belongs to B.
+    Expected: The account screen returns and shows account A's correct current Steam avatar/profile metadata. Mark the run `FAIL` if it is absent, remains a placeholder, or belongs to B.
 
 19. Open Steam for account B.
 
