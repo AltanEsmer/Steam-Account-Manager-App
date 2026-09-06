@@ -84,10 +84,10 @@ This probe is not part of the acceptance candidate.
 
 The exact documentation checkpoint and its independent tester/reviewer receipts
 are recorded in [Draft PR #14](https://github.com/D4gkan/Steam-Account-Manager-App/pull/14).
-That checkpoint must rebuild the identical APKs and pass independent retained-data
-verification before explicitly releasing this guide for human testing. Documentation
-alone is not an official `GO`; live Steam/CSFloat evidence on the emulator and a
-supported physical device plus the required official acknowledgements remain missing.
+The final documentation checkpoint rebuilt the identical APKs and passed independent
+retained-data verification. The later human Steam/CSFloat evidence, physical-device
+result, reviewer acknowledgements, and official decision are recorded in the current
+`GO` section above.
 
 Current environment was rechecked: Windows 11 Pro `10.0.26200`; Android Studio
 2025.2.1 build `AI-252.25557.131.2521.14432022`; dedicated AVD
