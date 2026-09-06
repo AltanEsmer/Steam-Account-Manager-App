@@ -47,8 +47,17 @@ GeckoView and the CSFloat extension will be pinned to versions that pass the
 compatibility contract. Either dependency changing is a security-sensitive upgrade
 that requires the contract to be rerun.
 
-The first GeckoView release supports only the official CSFloat extension. Arbitrary
-extensions and an extension marketplace remain out of scope.
+The first GeckoView release supports only the official CSFloat extension as a
+third-party browser extension. Arbitrary user-installed extensions and an extension
+marketplace remain out of scope. A fixed app-owned Steam profile detector may use a
+built-in WebExtension solely as the GeckoView bridge for the existing public
+avatar/profile feature; it is application code bundled with the APK, not a supported
+or replaceable browser extension. Before the bridge is installed or any Steam page
+is loaded, versioned consent for that exact `(account, website)` profile must disclose
+its Steam origins, visible public avatar/profile fields, and private connection back
+to the app. Denial or dismissal loads nothing and grants nothing. Any change to its
+code, manifest permissions, origins, purpose, or data flow requires security review
+and renewed consent.
 
 ## Mandatory prototype gate
 
