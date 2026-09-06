@@ -1,21 +1,21 @@
 # Issue #8 production GeckoView verification receipt
 
-Status: **Machine/emulator verification PASS at application/test source `6b1f4b5`; current-head independent review and focused physical-device Steam smoke test pending**
+Status: **Machine/emulator verification PASS at application/test source `0712562`; current-head independent review and focused physical-device Steam smoke test pending**
 
 ## Exact candidate
 
-- Application/test source commit: `6b1f4b5e34e3e01fa7ed96824563bd8a33561533`
+- Application/test source commit: `0712562f067087e08e32be5125be8326b38368f5`
 - Branch: `codex/geckoview-campaign`
 - Variant: debug, using the production Steam-to-GeckoView routing path
 - GeckoView: `153.0.20260810162159`
 - Preserved evidence directory:
-  `C:\Users\esmer\AppData\Local\Temp\sam-gv8-6b1f4b5`
+  `C:\Users\esmer\AppData\Local\Temp\sam-gv8-0712562`
 - `app-debug.apk`: 598,942,383 bytes; SHA-256
-  `D17F8D09EB6EBB2FE5BECB1CDED5C00559AD9541CE51EB4BA81E7B823273FC63`
+  `43E90ADB0CA7684FBDCBF5D4209A08EC1DC1276C224A775800E75007B42ACFB9`
 - `app-debug-androidTest.apk`: 2,270,718 bytes; SHA-256
   `622BDE349CB6B86E61969EDD113DC05BFFB0AFD79ABF64CC064981E0AA343D29`
-- Preserved full instrumentation XML: 4,735 bytes; SHA-256
-  `D64303815195ACF3497742D151163DD470B9A9FB77A6C8DBC1A359FA484215B7`
+- Preserved full instrumentation XML: 4,745 bytes; SHA-256
+  `9E7EA04AAC7BC74262F48B70A57ED05B670FA62E698954B0965451E01D331FF7`
 
 The APK is tied to the application/test source commit above. A following
 documentation-only checkpoint does not change the APK or its source. The phone gate
@@ -34,19 +34,23 @@ tightly scoped app-owned Gecko bridge. Before the Gecko runtime is created, a st
 bridge is activated, a new bridge is installed, or a Steam page is loaded, a
 versioned per-profile dialog discloses the exact Steam origins, visible public
 avatar/profile links, and the private connection back to the app. **Allow and
-continue** synchronously records consent before Gecko activation. Cancel or Android
-Back closes the screen, loads nothing, starts no Gecko child process, and stores no
-consent. A bridge retained from an earlier valid consent remains inert until renewed
-consent is recorded. The async broadcast-to-Room update holds Android's receiver
-lifecycle until completion. Existing account/session database fields and schema are
-unchanged.
+continue** must synchronously record consent before Gecko activation. If the durable
+write fails, the in-process value is restored to false, the disclosure remains open
+with retry/cancel guidance, and no Gecko runtime, bridge, or page starts. Cancel or
+Android Back closes the screen, loads nothing, starts no Gecko child process, and
+stores no consent. A bridge retained from an earlier valid consent remains inert
+until renewed consent is recorded. The async broadcast-to-Room update holds
+Android's receiver lifecycle until completion. Existing account/session database
+fields and schema are unchanged.
 
-Both the production browser worker and the disposable prototype now attempt graceful
-Gecko shutdown for three seconds within an eight-second total stop budget. If Gecko
-does not exit, only the freshly revalidated exact captured worker PID and process
-name may be terminated; allowlisted pinned-Gecko child processes are then reaped and
-the empty process state must remain stable. This shared lifecycle repair was required
-by the full regression suite and does not broaden the production migration scope.
+The production browser worker attempts graceful Gecko shutdown for three seconds and
+the disposable prototype for six seconds, each within an eight-second total stop
+budget. If Gecko does not exit, only the freshly revalidated exact captured worker
+PID and process name may be terminated; allowlisted pinned-Gecko child processes are
+then reaped and the empty process state must remain stable. The prototype's six-second
+window lets a completed extension-state mutation flush before fallback termination.
+This shared lifecycle repair was required by the full regression suite and does not
+broaden the production migration scope.
 
 ## Environment
 
@@ -66,7 +70,7 @@ wiped. The final clean run followed that recovery.
 
 ## Automated and emulator results
 
-Primary application/unit/lint build command at exact source `6b1f4b5`:
+Primary application/unit/lint build command at exact source `0712562`:
 
 ```powershell
 $env:ANDROID_HOME = 'C:\Users\esmer\AppData\Local\Android\Sdk'
@@ -74,10 +78,10 @@ $env:ANDROID_SERIAL = 'emulator-5580'
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug lintRelease --rerun-tasks --console=plain
 ```
 
-Exit 0 in 1 minute 8 seconds; 103/103 tasks completed. All 52 unit tests
+Exit 0 in 57 seconds; 103/103 tasks completed. All 56 unit tests
 passed with zero failures, errors, or skips. `assembleDebug`,
 `assembleDebugAndroidTest`, and both lint variants passed. Debug lint reported zero
-errors and 120 warnings; release lint reported zero errors and 52 warnings.
+errors and 121 warnings; release lint reported zero errors and 53 warnings.
 
 The final exact-source emulator command was:
 
@@ -86,7 +90,7 @@ The final exact-source emulator command was:
 ```
 
 It passed 27/27 instrumentation tests with zero failures, errors, or skips. Gradle
-exited 0 in 8 minutes 5 seconds; the XML records 467.105 test seconds. Result path:
+exited 0 in 17 minutes 53 seconds; the XML records 1054.493 test seconds. Result path:
 
 `app/build/outputs/androidTest-results/connected/debug/TEST-Codex_GeckoView_Campaign_API_36(AVD) - 16-_app-.xml`
 
@@ -118,9 +122,15 @@ for cleanup. The corrected external-handoff plus marker-disable sequence passed
 three consecutive runs (47.815, 45.762, and 51.195 seconds).
 
 The primary found zero app-owned processes after the final run. `git diff --check`
-and the clean tracked-worktree check passed at exact source `6b1f4b5`. Earlier failed
-runs exposed real graceful-shutdown and test-foregrounding defects and were repaired;
-their results are superseded, not counted as passing evidence. One earlier direct
+and the clean tracked-worktree check passed at exact source `0712562`. An immediately
+preceding run at `f2b3475` passed 26/27 but reproduced a prior prototype marker as
+disabled after its interrupted reopen/stop cycle. A focused retry reproduced the
+same failure, so it was repaired rather than treated as transient. The repaired
+method then passed three consecutive runs (95.594, 109.575, and 103.694 seconds), and
+the neighboring interrupted-screen and explicit-disable persistence cases passed
+(92.203 and 69.422 seconds). Earlier failed runs exposed real graceful-shutdown and
+test-foregrounding defects and were repaired; their results are superseded, not
+counted as passing evidence. One earlier direct
 `adb am instrument` command targeted the non-debug test package and exited 1 without
 starting a test; package inspection identified the correct
 `com.steamaccountmanager.app.debug.test` runner.
@@ -146,7 +156,10 @@ The bounded repair commits are:
 - `4d09ef3` — exercise renewed consent with a previously installed helper;
 - `1d1edc1` — apply the same bounded shutdown contract to the prototype;
 - `bd483d9` — isolate external-handoff recovery; and
-- `6b1f4b5` — independently prove external foreground handoff and router recovery.
+- `6b1f4b5` — independently prove external foreground handoff and router recovery;
+- `f2b3475` — fail closed when detector-consent persistence fails; and
+- `0712562` — give completed prototype marker state time to flush within the same
+  bounded shutdown contract.
 
 The prior tester/reviewer result at `1f03397` was invalidated by these source repairs
 and is not current acceptance evidence. Only the exact APK listed above may enter
@@ -160,15 +173,15 @@ libraries, and the built-in Steam profile detector. Searches found zero release
 matches for the debug prototype activity/process or issue-6 synthetic marker. The
 non-Steam WebView path and dependency remain present for rollback.
 
-At exact source `6b1f4b5`, `bundleRelease --rerun-tasks --console=plain` reached
+At exact source `0712562`, `bundleRelease --rerun-tasks --console=plain` reached
 `packageReleaseBundle` and then failed at `signReleaseBundle` because this checkout
 has no release signing configuration. No signing key was requested, read, or
 recorded. The unsigned intermediary artifacts are:
 
-- `intermediary-bundle.aab`: 587,465,928 bytes; SHA-256
-  `1B74FDA870113665D392207740500040F49F651630849E4407FCCD394631919C`
-- `base.zip`: 530,541,757 bytes; SHA-256
-  `C0AE47F3B16394A65037013E8F75EEAFE69DC4986193D8A3439AE59CC0A10F3B`
+- `intermediary-bundle.aab`: 587,472,771 bytes; SHA-256
+  `DE1CF49B064547EC1FFB7FFA652888965BE4366BA6BD60903067724ABDA0656D`
+- `base.zip`: 530,542,133 bytes; SHA-256
+  `FC1B1F7F4646ABE91BC4FEF6942B23D706CBC51FC997EA64A7EA66D9222F9441`
 
 The signing failure is an expected environment limitation, not a successful release
 build. Issue #8's gate artifact is the exact debug APK above.
