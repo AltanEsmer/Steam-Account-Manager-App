@@ -58,6 +58,7 @@ object BrowserProcessController {
     private const val KEY_ROUTING_TOKEN = "routing_token"
     private const val SHUTDOWN_POLL_INTERVAL_MS = 100L
     private const val SHUTDOWN_TIMEOUT_MS = 8_000L
+    private const val GRACEFUL_SHUTDOWN_MS = 3_000L
     private const val LAUNCH_CONFIRMATION_TIMEOUT_MS = 8_000L
     private val routingMutex = Mutex()
 
@@ -198,11 +199,31 @@ object BrowserProcessController {
         context.sendBroadcast(
             Intent(context, BrowserShutdownReceiver::class.java).setAction(ACTION_SHUTDOWN_BROWSER_PROCESS),
         )
-        val deadline = System.currentTimeMillis() + SHUTDOWN_TIMEOUT_MS
+        val startedAt = System.currentTimeMillis()
+        val deadline = startedAt + SHUTDOWN_TIMEOUT_MS
+        val forceWorkerAfter = startedAt + GRACEFUL_SHUTDOWN_MS
+        var workerFallbackLogged = false
         var stableEmptyPolls = 0
         while (System.currentTimeMillis() < deadline) {
             val processes = browserProcesses(context)
             val oldWorkerGone = processes.none { it.pid == oldWorker.pid && it.processName == oldWorker.processName }
+            if (!oldWorkerGone && System.currentTimeMillis() >= forceWorkerAfter) {
+                val confirmedProcesses = browserProcesses(context)
+                val stillCapturedWorker = confirmedProcesses.any {
+                    it.pid == oldWorker.pid && it.processName == oldWorker.processName
+                }
+                if (stillCapturedWorker) {
+                    Process.killProcess(oldWorker.pid)
+                    if (!workerFallbackLogged) {
+                        Log.w(TAG, "Graceful browser shutdown exceeded its grace period; applying bounded fallback.")
+                        workerFallbackLogged = true
+                    }
+                }
+                terminateObservedChildren(
+                    context,
+                    confirmedProcesses.filterNot { it.processName == browserWorkerName(context) },
+                )
+            }
             if (oldWorkerGone) {
                 terminateObservedChildren(context, processes.filterNot { it.processName == browserWorkerName(context) })
                 if (processes.isEmpty()) {
