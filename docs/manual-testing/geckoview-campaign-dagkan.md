@@ -943,37 +943,49 @@ available for other sites and rollback. CSFloat production installation is issue
 
 13. Open Steam for account B.
 
-    Expected: B does not show account A's authenticated identity or A's signed-in Steam page.
+    Expected: B's separate **Sign in to Steam once** message appears; no account A authenticated page is visible.
 
-14. Sign in to Steam account B on the phone.
+14. Press **Continue** on B's message.
+
+    Expected: Steam opens for B without showing account A's authenticated identity or A's signed-in page.
+
+15. Sign in to Steam account B on the phone.
 
     Expected: Steam signs in as B without changing A's session.
 
-15. Close the in-app browser.
+16. Close the in-app browser.
 
     Expected: The account screen returns normally.
 
-16. Open Steam for account A.
+17. Open Steam for account A.
 
     Expected: The session returns to signed-in account A, never B.
 
-17. Close the in-app browser.
+18. Close the in-app browser.
 
-    Expected: The account screen returns and any detected public avatar/profile metadata belongs to A.
+    Expected: The account screen returns and shows account A's correct current Steam avatar/profile metadata. Mark the run `FAIL` or `INCOMPLETE` if it is absent, remains a placeholder, or belongs to B.
 
-18. Open Steam for account B.
+19. Open Steam for account B.
 
     Expected: The session returns to signed-in account B, never A.
 
-19. Close Steam Account Manager from Android's recent-apps screen.
+20. Close Steam Account Manager from Android's recent-apps screen.
 
     Expected: Android removes the visible app task without uninstalling or clearing app data.
 
-20. Reopen Steam Account Manager and open Steam for account A.
+21. Reopen Steam Account Manager.
+
+    Expected: The app returns to its normal account screen and remains responsive.
+
+22. Select test account A.
+
+    Expected: Account A's website list opens.
+
+23. Open Steam for account A.
 
     Expected: A's correct isolated session is restored and the app remains responsive.
 
-21. Report only the core result to the user.
+24. Report only the core result to the user.
 
     Expected: Report `ISSUE #8 PASS` or `ISSUE #8 FAIL`, Samsung Galaxy S25 Ultra,
     Android 16, approximate test time, whether A stayed A and B stayed B, whether
