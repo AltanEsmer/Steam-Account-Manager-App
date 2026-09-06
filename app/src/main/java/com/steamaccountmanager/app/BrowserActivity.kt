@@ -70,7 +70,7 @@ class BrowserActivity : ComponentActivity() {
             finish()
             return
         }
-        val runtimeProvider = {
+        val getOrCreateRuntimeAfterConsent = {
             sharedRuntime ?: GeckoRuntime.create(
                 applicationContext,
                 GeckoRuntimeSettings.Builder().arguments(arrayOf("--profile", profile.absolutePath)).build(),
@@ -87,14 +87,14 @@ class BrowserActivity : ComponentActivity() {
         setContent {
             SteamAccountManagerTheme {
                 GeckoBrowserScreen(
-                    runtimeProvider = runtimeProvider,
+                    getOrCreateRuntimeAfterConsent = getOrCreateRuntimeAfterConsent,
                     accountId = accountId,
                     websiteId = websiteId,
                     startUrl = startUrl,
                     allowedDomains = allowedDomains,
                     showDetectorConsent = showDetectorConsent,
                     onDetectorConsentGranted = {
-                        consentPreferences.edit().putBoolean(detectorConsentKey(profileId), true).apply()
+                        consentPreferences.edit().putBoolean(detectorConsentKey(profileId), true).commit()
                     },
                     onClose = { finish() },
                 )

@@ -51,7 +51,7 @@ import org.mozilla.geckoview.WebExtension
 /** The production GeckoView surface for the built-in Steam browser journey. */
 @Composable
 fun GeckoBrowserScreen(
-    runtimeProvider: () -> GeckoRuntime,
+    getOrCreateRuntimeAfterConsent: () -> GeckoRuntime,
     accountId: String,
     websiteId: String,
     startUrl: String,
@@ -108,7 +108,7 @@ fun GeckoBrowserScreen(
         return
     }
 
-    val runtime = remember { runtimeProvider() }
+    val runtime = remember { getOrCreateRuntimeAfterConsent() }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Surface(color = MaterialTheme.colorScheme.surface) {
