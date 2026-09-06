@@ -1,19 +1,21 @@
 # Issue #8 production GeckoView verification receipt
 
-Status: **Repaired machine/emulator verification PASS at `25f0a1d`; current-head independent review and focused physical-device Steam smoke test pending**
+Status: **Repaired machine/emulator verification PASS at `efa9bbe`; current-head independent review and focused physical-device Steam smoke test pending**
 
 ## Exact candidate
 
-- Source commit: `25f0a1df8e923134bed3f48349eb55f642107644`
+- Source commit: `efa9bbe49fc9f25924621ce66f71759b538e3bb9`
 - Branch: `codex/geckoview-campaign`
 - Variant: debug, using the production Steam-to-GeckoView routing path
 - GeckoView: `153.0.20260810162159`
 - Preserved evidence directory:
-  `C:\Users\esmer\AppData\Local\Temp\sam-gv8-25f0a1d`
+  `C:\Users\esmer\AppData\Local\Temp\sam-gv8-efa9bbe`
 - `app-debug.apk`: 598,925,999 bytes; SHA-256
-  `F63EF6FB0420A7FC69B81F19D736434A05392A91C1209E34BC7CB18FE7F4334F`
-- `app-debug-androidTest.apk`: 2,265,506 bytes; SHA-256
-  `2C3431527FA937823BC45E2432A857FEE6AA504D3179AD9EF2C16215895F8469`
+  `37B6BD5FAB54517D017C7C2299B0EA102B114EE12282B3E3D430E4932D5C5434`
+- `app-debug-androidTest.apk`: 2,265,834 bytes; SHA-256
+  `3D802CEC4E50DF41A908EA11A286DF2B27CDE2BFF5C1D2A8F7599AC1CDD4CC7A`
+- Preserved full instrumentation XML: 4,740 bytes; SHA-256
+  `92BA4FAFFBC454A5D83AE5A15594F00AC5C746D7A88B85700E89847259745B8B`
 
 The APK is tied to the source commit above. The later documentation commit does not
 change application or test sources. The phone gate must use this exact APK; the
@@ -28,8 +30,9 @@ The old WebView implementation remains available for non-Steam sites and rollbac
 this issue does not claim the final WebView removal.
 
 Steam avatar/profile detection now parses engine-neutral public page metadata from a
-tightly scoped app-owned Gecko bridge. Before GeckoView, the helper, or a Steam page
-is composed, a versioned per-profile dialog discloses the exact Steam origins,
+tightly scoped app-owned Gecko bridge. Before the Gecko runtime is created, the
+helper is activated, or a Steam page is composed, a versioned per-profile dialog
+discloses the exact Steam origins,
 visible public avatar/profile links, private connection back to the app, and possible
 WebView reauthentication. **Allow and continue** is required; Cancel or Back closes
 the screen, loads nothing, does not invoke helper installation, and stores no
@@ -61,13 +64,13 @@ $env:ANDROID_SERIAL = 'emulator-5580'
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug lintRelease --rerun-tasks
 ```
 
-Exit 0 in 1 minute 17 seconds; 103 tasks executed. All 52 unit tests passed with zero
+Exit 0 in 1 minute 4 seconds; 103 tasks executed. All 52 unit tests passed with zero
 failures, errors, or skips. `assembleDebug`, `assembleDebugAndroidTest`, and
 both lint variants passed. Debug lint reported zero errors and 120 warnings; release
 lint reported zero errors and 52 warnings.
 
-The issue-specific `ProductionGeckoSessionTest` passed before commit and twice again
-against the committed exact HEAD. Its three tests use fixed synthetic account labels,
+The issue-specific `ProductionGeckoSessionTest` passed once before commit and twice
+against the committed exact HEAD (53.757 and 57.433 seconds). Its three tests use fixed synthetic account labels,
 random run markers, safe public-format detector values, and loopback-only pages. They
 verify:
 
@@ -84,7 +87,8 @@ verify:
   synthetic account's Room row, followed by cleanup.
 
 The repaired exact-HEAD full instrumentation run passed 27/27 with zero failures,
-errors, or skips in 230.825 seconds. Result path:
+errors, or skips in 564.242 test seconds. Gradle exited 0 in 9 minutes 38 seconds.
+Result path:
 
 `app/build/outputs/androidTest-results/connected/debug/TEST-Codex_GeckoView_Campaign_API_36(AVD) - 16-_app-.xml`
 
@@ -92,6 +96,11 @@ The primary found zero app-owned processes after the run. `git diff --check` and
 clean-worktree check passed at the exact candidate SHA. The previous medium pass and
 xhigh review at the superseded `4bdcfce` documentation checkpoint were invalidated
 by the source repairs and are not current acceptance evidence.
+
+The first direct `adb am instrument` attempt used the non-debug test package and
+exited 1 without starting a test. `adb -s emulator-5580 shell pm list instrumentation`
+identified `com.steamaccountmanager.app.debug.test`; both corrected exact-class runs
+then exited 0. This was a command-target error, not an application or test failure.
 
 ## Review finding and repair record
 
@@ -102,9 +111,11 @@ database update completed. The repaired commits are:
 - `502b7de` — require versioned, purpose-specific helper consent before Gecko
   composition, with a denial path;
 - `4f6e361` — hold the broadcast lifecycle through the Room update; and
-- `25f0a1d` — cover allow/deny behavior and detector-to-account persistence.
+- `25f0a1d` — cover allow/deny behavior and detector-to-account persistence;
+- `3b28923` — defer Gecko runtime creation until explicit consent; and
+- `efa9bbe` — exercise Cancel, Android Back, and repeated prompting.
 
-These repairs invalidate the old `00F506...E0DC` APK. Only the exact current APK
+These repairs invalidate the old `00F506...E0DC` and `F63EF6...4334F` APKs. Only the exact current APK
 listed above may enter the phone gate after current-head tester/reviewer acceptance.
 
 ## Packaging and rollback checks
@@ -137,7 +148,7 @@ no signing key was requested, read, or recorded.
   device persistence. Those are the focused phone gate below.
 - The child-process allowlist matches pinned GeckoView 153's merged manifest and must
   be reviewed when GeckoView is upgraded.
-- No credentials, Steam identifiers, authentication pages, cookies, tokens, trades,
+- No credentials, real Steam identifiers, authentication pages, cookies, tokens, trades,
   payments, or browser-storage exports were used or captured.
 
 The physical-device procedure is in

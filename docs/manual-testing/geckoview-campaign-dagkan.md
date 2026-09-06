@@ -876,9 +876,9 @@ CSFloat production installation is issue #10 and is not part of this focused tes
 
 ## Before you start
 
-- Exact application source: `25f0a1df8e923134bed3f48349eb55f642107644`.
+- Exact application source: `efa9bbe49fc9f25924621ce66f71759b538e3bb9`.
 - Use only the supplied `app-debug.apk`: 598,925,999 bytes; SHA-256
-  `F63EF6FB0420A7FC69B81F19D736434A05392A91C1209E34BC7CB18FE7F4334F`.
+  `37B6BD5FAB54517D017C7C2299B0EA102B114EE12282B3E3D430E4932D5C5434`.
 - Do not reuse the issue #7 prototype APK. Install this APK as an update; do not
   uninstall the existing debug app first, because that would erase the migration
   state this test needs.
@@ -919,81 +919,97 @@ CSFloat production installation is issue #10 and is not part of this focused tes
    avatar/profile links, the private connection back to this app, and the possible
    one-time sign-in caused by the WebView migration.
 
-6. Press **Allow and continue** on that message.
+6. Press **Cancel** on that message.
+
+   Expected: The browser closes without loading a Steam page or granting detector consent.
+
+7. Open Steam for account A again.
+
+   Expected: **Allow Steam profile detection?** appears again before any Steam page.
+
+8. Press Android Back once.
+
+   Expected: The browser closes without loading a Steam page or granting detector consent.
+
+9. Open Steam for account A again.
+
+   Expected: **Allow Steam profile detection?** appears for a third time before any Steam page.
+
+10. Press **Allow and continue** on that message.
 
    Expected: Steam opens inside the app only after consent, and the message does not
    claim that old login data was migrated.
 
-7. Sign in to Steam account A on the phone.
+11. Sign in to Steam account A on the phone.
 
    Expected: Steam accepts the safe account's normal authentication flow; all secrets remain on the phone.
 
-8. Confirm that Steam shows account A's signed-in page.
+12. Confirm that Steam shows account A's signed-in page.
 
    Expected: The visible identity is A and browsing remains inside the app on allowed Steam pages.
 
-9. Close the in-app browser with its **Close** button.
+13. Close the in-app browser with its **Close** button.
 
    Expected: The account screen returns and stays usable.
 
-10. Open Steam for account A again.
+14. Open Steam for account A again.
 
     Expected: Account A is still signed in; no second login or Steam Guard challenge is needed unless Steam itself expired the session.
 
-11. Close the in-app browser.
+15. Close the in-app browser.
 
     Expected: The account screen returns normally.
 
-12. Select test account B.
+16. Select test account B.
 
     Expected: Account B's website list opens.
 
-13. Open Steam for account B.
+17. Open Steam for account B.
 
     Expected: B's separate **Allow Steam profile detection?** message appears before
     any Steam page; no account A authenticated page is visible.
 
-14. Press **Allow and continue** on B's message.
+18. Press **Allow and continue** on B's message.
 
     Expected: Steam opens for B without showing account A's authenticated identity or A's signed-in page.
 
-15. Sign in to Steam account B on the phone.
+19. Sign in to Steam account B on the phone.
 
     Expected: Steam signs in as B without changing A's session.
 
-16. Close the in-app browser.
+20. Close the in-app browser.
 
     Expected: The account screen returns normally.
 
-17. Open Steam for account A.
+21. Open Steam for account A.
 
     Expected: The session returns to signed-in account A, never B.
 
-18. Close the in-app browser.
+22. Close the in-app browser.
 
     Expected: The account screen returns and shows account A's correct current Steam avatar/profile metadata. Mark the run `FAIL` if it is absent, remains a placeholder, or belongs to B.
 
-19. Open Steam for account B.
+23. Open Steam for account B.
 
     Expected: The session returns to signed-in account B, never A.
 
-20. Close Steam Account Manager from Android's recent-apps screen.
+24. Close Steam Account Manager from Android's recent-apps screen.
 
     Expected: Android removes the visible app task without uninstalling or clearing app data.
 
-21. Reopen Steam Account Manager.
+25. Reopen Steam Account Manager.
 
     Expected: The app returns to its normal account screen and remains responsive.
 
-22. Select test account A.
+26. Select test account A.
 
     Expected: Account A's website list opens.
 
-23. Open Steam for account A.
+27. Open Steam for account A.
 
     Expected: A's correct isolated session is restored and the app remains responsive.
 
-24. Report only the core result to the user.
+28. Report only the core result to the user.
 
     Expected: Report `ISSUE #8 PASS` or `ISSUE #8 FAIL`, Samsung Galaxy S25 Ultra,
     Android 16, approximate test time, whether A stayed A and B stayed B, whether

@@ -52,8 +52,9 @@ third-party browser extension. Arbitrary user-installed extensions and an extens
 marketplace remain out of scope. A fixed app-owned Steam profile detector may use a
 built-in WebExtension solely as the GeckoView bridge for the existing public
 avatar/profile feature; it is application code bundled with the APK, not a supported
-or replaceable browser extension. Before the bridge is installed or any Steam page
-is loaded, versioned consent for that exact `(account, website)` profile must disclose
+or replaceable browser extension. Before the Gecko runtime is created, the bridge is
+installed, or any Steam page is loaded, versioned consent for that exact
+`(account, website)` profile must disclose
 its Steam origins, visible public avatar/profile fields, and private connection back
 to the app. Denial or dismissal loads nothing and grants nothing. Any change to its
 code, manifest permissions, origins, purpose, or data flow requires security review
