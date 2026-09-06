@@ -61,20 +61,21 @@ Use these terms consistently in code, tests, issues, and documentation.
 
 ## Current architecture
 
-The production browser currently uses Android WebView:
+Production is in a staged engine migration:
 
 - `BrowserProcessController` selects the browser session and restarts the dedicated
-  browser process when the WebView data-directory suffix changes.
-- `BrowserActivity` configures that suffix before creating the browser UI.
-- `BrowserScreen` owns WebView creation, browser controls, loading and error state,
-  cookie flushing, and external handoff.
-- `WebsitePolicy` contains the reusable host allowlist behavior, while
-  `DomainRestrictedWebViewClient` adapts it to WebView.
-- `SteamLoginDetector` derives non-sensitive Steam profile metadata from the loaded
-  session, but its current entry point is coupled directly to WebView.
+  browser process when its engine-owned profile changes.
+- `BrowserActivity` opens Steam sessions with a persistent GeckoView profile and
+  temporarily retains WebView for other websites as the reversible migration path.
+- `GeckoBrowserScreen` and `BrowserScreen` own their engine-specific browser shell.
+- `WebsitePolicy` contains the reusable host allowlist behavior; each engine adapts
+  it at its navigation boundary.
+- `SteamLoginDetector` accepts bounded public profile metadata from either the
+  consented GeckoView content-script bridge or the temporary WebView path.
 - `SessionRepository` persists only browser-session metadata.
 
-This architecture is current truth until the final GeckoView cutover completes.
+This staged architecture is current truth until the final GeckoView cutover removes
+the temporary WebView path.
 
 ## Target direction
 

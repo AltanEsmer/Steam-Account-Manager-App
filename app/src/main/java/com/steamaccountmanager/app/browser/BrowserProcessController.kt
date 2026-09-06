@@ -14,40 +14,14 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /**
- * Orchestrates opening a given [SessionIdentifier] (account + website pair) with a
- * genuinely isolated, persistent WebView profile.
+ * Opens one [SessionIdentifier] (account + website pair) with an isolated,
+ * persistent engine-owned browser profile in the dedicated `:browser` process.
  *
- * ## Why this exists
- * `WebView.setDataDirectorySuffix(suffix)` is the only supported way to give a
- * WebView its own private cookie / localStorage / IndexedDB / cache directory on
- * Android. Its documented constraints are:
- *   1. It must be called before ANY WebView instance is created in the current
- *      process.
- *   2. It can only be called ONCE per process -- a second call with a different
- *      suffix in the same still-running process throws / is not supported, since
- *      the underlying Chromium data-directory lock is acquired once per process.
- *
- * Because this app needs to move between ~100 possible (account x website) session
- * directories at runtime -- not just once at process start -- a single long-lived
- * process cannot host more than one session's data directory for its entire
- * lifetime. The reliable way to switch is therefore to run the WebView in a
- * dedicated process (declared as `:browser` in the manifest, hosted by
- * [com.steamaccountmanager.app.BrowserActivity]) and fully restart that process
- * every time the requested session differs from whichever suffix it was last
- * started with. A brand-new process is always allowed to call
- * `setDataDirectorySuffix()` for the first time, so this gives full, genuine
- * per-session isolation of cookies/localStorage/IndexedDB/cache with no manual
- * cookie-jar swapping and no risk of one account inheriting another's storage.
- *
- * This also directly satisfies the "don't keep 80 sessions in memory" requirement:
- * by construction, at most one session's WebView is ever alive at a time. Every
- * other session's data simply sits on disk under
- * `/data/data/<pkg>/app_webview_<suffix>/` until it's opened again.
- *
- * The trade-off, documented honestly: switching between two *different* sessions
- * costs a small process-restart delay (typically well under a second on modern
- * hardware) rather than being instantaneous. Re-opening the *same* session that is
- * already the active one is instantaneous (no restart needed).
+ * Steam uses a deterministic GeckoView profile. Other websites temporarily retain
+ * WebView, whose data-directory suffix must be selected before WebView construction.
+ * Switching profile identity therefore restarts the worker; reopening the same
+ * identity reuses it. By construction, only one browser session is live in memory,
+ * while inactive profile state remains on disk under its owning engine.
  */
 object BrowserProcessController {
 
