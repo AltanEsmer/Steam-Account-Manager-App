@@ -57,7 +57,7 @@ fun GeckoBrowserScreen(
     startUrl: String,
     allowedDomains: List<String>,
     showDetectorConsent: Boolean,
-    onDetectorConsentGranted: () -> Unit,
+    persistDetectorConsent: () -> Boolean,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -75,6 +75,7 @@ fun GeckoBrowserScreen(
     var blockedUri by remember { mutableStateOf<Uri?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var showConsent by remember { mutableStateOf(showDetectorConsent) }
+    var consentPersistenceFailed by remember { mutableStateOf(false) }
 
     fun openExternal(uri: Uri) {
         try {
@@ -94,13 +95,22 @@ fun GeckoBrowserScreen(
                         "so you may need to sign in again. This app includes a profile detector limited to " +
                         "https://steamcommunity.com and https://www.steamcommunity.com. It reads only visible " +
                         "public avatar and profile links and sends those values only back to this app through " +
-                        "its internal connection.",
+                        "its internal connection." +
+                        if (consentPersistenceFailed) {
+                            " Consent could not be saved. Try again or cancel."
+                        } else {
+                            ""
+                        },
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    onDetectorConsentGranted()
-                    showConsent = false
+                    if (detectorConsentWasPersisted(persistDetectorConsent)) {
+                        consentPersistenceFailed = false
+                        showConsent = false
+                    } else {
+                        consentPersistenceFailed = true
+                    }
                 }) { Text("Allow and continue") }
             },
             dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
@@ -262,6 +272,12 @@ fun GeckoBrowserScreen(
             dismissButton = { TextButton(onClick = { blockedUri = null }) { Text("Stay here") } },
         )
     }
+}
+
+internal fun detectorConsentWasPersisted(persist: () -> Boolean): Boolean = try {
+    persist()
+} catch (_: RuntimeException) {
+    false
 }
 
 private fun detectorDelegate(

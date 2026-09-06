@@ -93,8 +93,16 @@ class BrowserActivity : ComponentActivity() {
                     startUrl = startUrl,
                     allowedDomains = allowedDomains,
                     showDetectorConsent = showDetectorConsent,
-                    onDetectorConsentGranted = {
-                        consentPreferences.edit().putBoolean(detectorConsentKey(profileId), true).commit()
+                    persistDetectorConsent = {
+                        val consentKey = detectorConsentKey(profileId)
+                        persistDetectorConsentFailClosed(
+                            persist = {
+                                consentPreferences.edit().putBoolean(consentKey, true).commit()
+                            },
+                            rollbackInMemory = {
+                                consentPreferences.edit().putBoolean(consentKey, false).apply()
+                            },
+                        )
                     },
                     onClose = { finish() },
                 )
@@ -158,4 +166,17 @@ class BrowserActivity : ComponentActivity() {
             }
         }
     }
+}
+
+internal fun persistDetectorConsentFailClosed(
+    persist: () -> Boolean,
+    rollbackInMemory: () -> Unit,
+): Boolean {
+    val persisted = try {
+        persist()
+    } catch (_: RuntimeException) {
+        false
+    }
+    if (!persisted) rollbackInMemory()
+    return persisted
 }
