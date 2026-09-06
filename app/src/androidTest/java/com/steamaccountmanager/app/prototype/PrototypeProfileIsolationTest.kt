@@ -58,13 +58,30 @@ class PrototypeProfileIsolationTest {
             "Explicit recovery must top-resume the resolved browser; observed=$resumedPackage",
             resumedPackage == browserPackage,
         )
-        instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
-        val homeDeadline = SystemClock.uptimeMillis() + 5_000
-        while (topResumedActivityPackage() == browserPackage && SystemClock.uptimeMillis() < homeDeadline) {
-            SystemClock.sleep(100)
+        fun launchRouter(): String? {
+            val output = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                instrumentation.uiAutomation.executeShellCommand(
+                    "am start -W --user 0 -f 0x14000000 -n ${router.flattenToString()}",
+                ),
+            ).bufferedReader().use { it.readText() }
+            return output.lineSequence().firstOrNull { it.startsWith("Status:") }
         }
-        instrumentation.startActivitySync(
-            Intent().setComponent(router).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        var launchStatus = launchRouter()
+        val returnDeadline = SystemClock.uptimeMillis() + 10_000
+        var returnedPackage: String? = null
+        var nextLaunchAt = SystemClock.uptimeMillis() + 2_000
+        while (SystemClock.uptimeMillis() < returnDeadline) {
+            returnedPackage = topResumedActivityPackage()
+            if (returnedPackage == context.packageName) break
+            if (SystemClock.uptimeMillis() >= nextLaunchAt) {
+                launchStatus = launchRouter()
+                nextLaunchAt = SystemClock.uptimeMillis() + 2_000
+            }
+            SystemClock.sleep(200)
+        }
+        assertTrue(
+            "Router cleanup launch failed; status=$launchStatus observed=$returnedPackage",
+            launchStatus == "Status: ok" && returnedPackage == context.packageName,
         )
         awaitText("Reopen selected slot")
     }
