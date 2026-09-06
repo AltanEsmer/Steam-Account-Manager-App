@@ -8,7 +8,7 @@
   "permissions": ["nativeMessaging", "geckoViewAddons"],
   "content_scripts": [
     {
-      "matches": ["https://steamcommunity.com/*"],
+      "matches": ["https://steamcommunity.com/*", "https://www.steamcommunity.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

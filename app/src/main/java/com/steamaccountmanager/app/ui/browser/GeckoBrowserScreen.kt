@@ -57,6 +57,7 @@ fun GeckoBrowserScreen(
     startUrl: String,
     allowedDomains: List<String>,
     showReauthenticationNotice: Boolean,
+    onReauthenticationNoticeAcknowledged: () -> Unit,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -64,6 +65,7 @@ fun GeckoBrowserScreen(
         WebsitePolicy(allowedDomains.firstOrNull().orEmpty(), allowedDomains.drop(1))
     }
     var sessionRef by remember { mutableStateOf<GeckoSession?>(null) }
+    var detectorExtensionRef by remember { mutableStateOf<WebExtension?>(null) }
     var currentUrl by remember { mutableStateOf(startUrl) }
     var title by remember { mutableStateOf(websiteId) }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -181,6 +183,7 @@ fun GeckoBrowserScreen(
                     runtime.webExtensionController.ensureBuiltIn(DETECTOR_URI, DETECTOR_EXTENSION_ID).accept(
                         { extension -> geckoView.post {
                             if (sessionRef === session && extension?.id == DETECTOR_EXTENSION_ID) {
+                                detectorExtensionRef = extension
                                 extension.setMessageDelegate(
                                     detectorDelegate(extension, session, accountId, context.applicationContext),
                                     DETECTOR_NATIVE_APP,
@@ -198,6 +201,8 @@ fun GeckoBrowserScreen(
                     geckoView
                 },
                 onRelease = { view ->
+                    detectorExtensionRef?.setMessageDelegate(null, DETECTOR_NATIVE_APP)
+                    detectorExtensionRef = null
                     sessionRef?.let { session ->
                         runtime.webExtensionController.setTabActive(session, false)
                         view.releaseSession()
@@ -227,7 +232,12 @@ fun GeckoBrowserScreen(
             text = {
                 Text("Steam now opens in the new isolated browser. Your previous WebView login cannot be migrated, so you may need to sign in again. This GeckoView session will then persist for this account and website.")
             },
-            confirmButton = { TextButton(onClick = { showNotice = false }) { Text("Continue") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    onReauthenticationNoticeAcknowledged()
+                    showNotice = false
+                }) { Text("Continue") }
+            },
         )
     }
 
@@ -263,12 +273,16 @@ private fun detectorDelegate(
         }
         port.setDelegate(object : WebExtension.PortDelegate {
             override fun onPortMessage(message: Any, sourcePort: WebExtension.Port) {
-                if (sourcePort !== port || message !is JSONObject || message.optString("type") != "profile") return
-                val allowedKeys = setOf("type", "avatarUrl", "profileUrl")
-                val keys = message.keys().asSequence().toSet()
-                if (keys != allowedKeys) return
-                SteamLoginDetector.parseResult(message.toString())?.let {
-                    SteamLoginDetector.sendResult(it, accountId, appContext)
+                try {
+                    if (sourcePort !== port || message !is JSONObject || message.optString("type") != "profile") return
+                    val allowedKeys = setOf("type", "avatarUrl", "profileUrl")
+                    val keys = message.keys().asSequence().toSet()
+                    if (keys != allowedKeys) return
+                    SteamLoginDetector.parseResult(message.toString())?.let {
+                        SteamLoginDetector.sendResult(it, accountId, appContext)
+                    }
+                } finally {
+                    sourcePort.disconnect()
                 }
             }
         })

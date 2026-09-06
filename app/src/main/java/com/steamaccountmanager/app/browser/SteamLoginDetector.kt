@@ -49,6 +49,7 @@ object SteamLoginDetector {
 
     /** Parses only public metadata from either WebView's encoded result or plain extension JSON. */
     fun parseResult(raw: String?): SteamProfileResult? {
+        if (raw == null || raw.length > MAX_RAW_RESULT_LENGTH) return null
         val json = unwrapJavascriptResult(raw) ?: return null
         val avatarUrl = field(json, "avatarUrl")?.takeIf(::isSafeSteamAvatar)
         val steamProfileId = field(json, "profileUrl")?.let(::validatedSteamProfileId)
@@ -90,7 +91,8 @@ object SteamLoginDetector {
     }
 
     private fun safeHttpsUri(value: String?): URI? = try {
-        URI(value ?: return null).takeIf {
+        if (value == null || value.length > MAX_URL_LENGTH) return null
+        URI(value).takeIf {
             it.scheme.equals("https", ignoreCase = true) &&
                 it.host != null && it.rawUserInfo == null && it.port in setOf(-1, 443)
         }
@@ -140,6 +142,9 @@ object SteamLoginDetector {
 
     private val STEAM_COMMUNITY_HOSTS = setOf("steamcommunity.com", "www.steamcommunity.com")
     private val PROFILE_PATH = Regex("^/(?:id/([A-Za-z0-9_-]{2,64})|profiles/([0-9]{17}))/?$")
+    // Keep hostile input below the recursive-regex range before field extraction.
+    private const val MAX_RAW_RESULT_LENGTH = 2_048
+    private const val MAX_URL_LENGTH = 2_048
 }
 
 data class SteamProfileResult(

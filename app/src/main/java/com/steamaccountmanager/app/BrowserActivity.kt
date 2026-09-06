@@ -29,14 +29,17 @@ class BrowserActivity : ComponentActivity() {
         val startUrl = intent.getStringExtra(BrowserProcessController.EXTRA_START_URL).orEmpty()
         val allowedDomains =
             intent.getStringArrayListExtra(BrowserProcessController.EXTRA_ALLOWED_DOMAINS).orEmpty()
-        if (shutdownRequested || accountId.isBlank() || websiteId.isBlank() || startUrl.isBlank() || allowedDomains.isEmpty()) {
+        val sessionId = SessionIdentifier(accountId, websiteId)
+        val routingToken = intent.getStringExtra(BrowserProcessController.EXTRA_ROUTING_TOKEN)
+        if (shutdownRequested || accountId.isBlank() || websiteId.isBlank() || startUrl.isBlank() ||
+            allowedDomains.isEmpty() || !BrowserProcessController.isLaunchAuthorized(this, sessionId, routingToken)
+        ) {
             Log.e(TAG, "BrowserActivity rejected an incomplete or stale browser-session request.")
             super.onCreate(savedInstanceState)
             finish()
             return
         }
 
-        val sessionId = SessionIdentifier(accountId, websiteId)
         if (websiteId != STEAM_WEBSITE_ID) {
             val suffix = intent.getStringExtra(BrowserProcessController.EXTRA_DATA_DIR_SUFFIX)
             if (suffix.isNullOrBlank()) {
@@ -77,7 +80,6 @@ class BrowserActivity : ComponentActivity() {
 
         val noticePreferences = getSharedPreferences(REAUTH_NOTICE_PREFERENCES, MODE_PRIVATE)
         val showReauthenticationNotice = !noticePreferences.getBoolean(profileId, false)
-        if (showReauthenticationNotice) noticePreferences.edit().putBoolean(profileId, true).apply()
 
         super.onCreate(savedInstanceState)
         setContent {
@@ -89,6 +91,9 @@ class BrowserActivity : ComponentActivity() {
                     startUrl = startUrl,
                     allowedDomains = allowedDomains,
                     showReauthenticationNotice = showReauthenticationNotice,
+                    onReauthenticationNoticeAcknowledged = {
+                        noticePreferences.edit().putBoolean(profileId, true).apply()
+                    },
                     onClose = { finish() },
                 )
             }

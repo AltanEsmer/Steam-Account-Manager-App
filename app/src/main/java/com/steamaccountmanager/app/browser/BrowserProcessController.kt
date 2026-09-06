@@ -8,7 +8,10 @@ import android.util.Log
 import com.steamaccountmanager.app.BrowserActivity
 import com.steamaccountmanager.app.domain.model.SessionIdentifier
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.UUID
 
 /**
  * Orchestrates opening a given [SessionIdentifier] (account + website pair) with a
@@ -52,8 +55,11 @@ object BrowserProcessController {
 
     private const val ROUTER_PREFS = "browser_router_prefs"
     private const val KEY_ACTIVE_SESSION = "active_session"
+    private const val KEY_ROUTING_TOKEN = "routing_token"
     private const val SHUTDOWN_POLL_INTERVAL_MS = 100L
     private const val SHUTDOWN_TIMEOUT_MS = 8_000L
+    private const val LAUNCH_CONFIRMATION_TIMEOUT_MS = 8_000L
+    private val routingMutex = Mutex()
 
     /**
      * Opens [sessionId] at [targetUrl], restricted to [allowedDomains]. Suspends
@@ -65,10 +71,11 @@ object BrowserProcessController {
         sessionId: SessionIdentifier,
         targetUrl: String,
         allowedDomains: List<String>,
-    ) {
+    ) = routingMutex.withLock {
         val appContext = context.applicationContext
         val requestedSuffix = sessionId.dataDirectorySuffix
         val requestedSession = isolationIdentity(sessionId)
+        var routingToken = UUID.randomUUID().toString()
 
         val authorized = withContext(Dispatchers.IO) {
             val prefs = appContext.getSharedPreferences(ROUTER_PREFS, Context.MODE_PRIVATE)
@@ -80,13 +87,17 @@ object BrowserProcessController {
                 Log.e(TAG, "Browser session switch timed out; refusing to launch the requested profile.")
                 return@withContext false
             }
+            if (processRunning && activeSession == requestedSession) {
+                routingToken = prefs.getString(KEY_ROUTING_TOKEN, null) ?: routingToken
+            }
 
             prefs.edit()
                 .putString(KEY_ACTIVE_SESSION, requestedSession)
+                .putString(KEY_ROUTING_TOKEN, routingToken)
                 .remove(LEGACY_KEY_ACTIVE_SUFFIX)
                 .commit()
         }
-        if (!authorized) return
+        if (!authorized) return@withLock
 
         val intent = Intent(appContext, BrowserActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -94,9 +105,33 @@ object BrowserProcessController {
             putExtra(EXTRA_ACCOUNT_ID, sessionId.accountId)
             putExtra(EXTRA_WEBSITE_ID, sessionId.websiteId)
             putExtra(EXTRA_START_URL, targetUrl)
+            putExtra(EXTRA_ROUTING_TOKEN, routingToken)
             putStringArrayListExtra(EXTRA_ALLOWED_DOMAINS, ArrayList(allowedDomains))
         }
-        appContext.startActivity(intent)
+        try {
+            appContext.startActivity(intent)
+        } catch (error: Exception) {
+            clearLaunchAuthorization(appContext, routingToken)
+            Log.e(TAG, "Browser worker launch failed; routing authorization was cleared.", error)
+            return@withLock
+        }
+
+        val workerAppeared = withContext(Dispatchers.IO) { awaitBrowserWorker(appContext) }
+        if (!workerAppeared) {
+            clearLaunchAuthorization(appContext, routingToken)
+            Log.e(TAG, "Browser worker launch was not observed; routing authorization was cleared.")
+            withContext(Dispatchers.IO) {
+                if (browserProcesses(appContext).isNotEmpty()) requestShutdownAndAwaitDeath(appContext)
+            }
+        }
+    }
+
+    /** Browser-process startup guard against a delayed launch whose router authorization expired. */
+    fun isLaunchAuthorized(context: Context, sessionId: SessionIdentifier, routingToken: String?): Boolean {
+        if (routingToken == null) return false
+        val prefs = context.getSharedPreferences(ROUTER_PREFS, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_ACTIVE_SESSION, null) == isolationIdentity(sessionId) &&
+            prefs.getString(KEY_ROUTING_TOKEN, null) == routingToken
     }
 
     /** Whether the currently-loaded browser session (if any) is this one. */
@@ -129,6 +164,23 @@ object BrowserProcessController {
         return browserProcesses(context).isEmpty()
     }
 
+    private fun awaitBrowserWorker(context: Context): Boolean {
+        val deadline = System.currentTimeMillis() + LAUNCH_CONFIRMATION_TIMEOUT_MS
+        val workerName = context.packageName + BROWSER_PROCESS_SUFFIX
+        while (System.currentTimeMillis() < deadline) {
+            if (browserProcesses(context).any { it.processName == workerName }) return true
+            Thread.sleep(SHUTDOWN_POLL_INTERVAL_MS)
+        }
+        return browserProcesses(context).any { it.processName == workerName }
+    }
+
+    private fun clearLaunchAuthorization(context: Context, routingToken: String) {
+        val prefs = context.getSharedPreferences(ROUTER_PREFS, Context.MODE_PRIVATE)
+        if (prefs.getString(KEY_ROUTING_TOKEN, null) == routingToken) {
+            prefs.edit().remove(KEY_ACTIVE_SESSION).remove(KEY_ROUTING_TOKEN).commit()
+        }
+    }
+
     private fun isolationIdentity(sessionId: SessionIdentifier): String =
         if (sessionId.websiteId == STEAM_WEBSITE_ID) GeckoProfileIdentity.idFor(sessionId)
         else "webview_${sessionId.dataDirectorySuffix}"
@@ -141,5 +193,6 @@ object BrowserProcessController {
     const val EXTRA_ACCOUNT_ID = "extra_account_id"
     const val EXTRA_WEBSITE_ID = "extra_website_id"
     const val EXTRA_START_URL = "extra_start_url"
+    const val EXTRA_ROUTING_TOKEN = "extra_routing_token"
     const val EXTRA_ALLOWED_DOMAINS = "extra_allowed_domains"
 }
