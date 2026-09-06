@@ -1,19 +1,19 @@
 # Issue #8 production GeckoView verification receipt
 
-Status: **Machine and independent emulator verification PASS at `752a8d0`; focused physical-device Steam smoke test pending**
+Status: **Repaired machine/emulator verification PASS at `25f0a1d`; current-head independent review and focused physical-device Steam smoke test pending**
 
 ## Exact candidate
 
-- Source commit: `752a8d07fa694ea643b6e020af0ce4973523a73f`
+- Source commit: `25f0a1df8e923134bed3f48349eb55f642107644`
 - Branch: `codex/geckoview-campaign`
 - Variant: debug, using the production Steam-to-GeckoView routing path
 - GeckoView: `153.0.20260810162159`
 - Preserved evidence directory:
-  `C:\Users\esmer\AppData\Local\Temp\sam-gv8-752a8d0`
+  `C:\Users\esmer\AppData\Local\Temp\sam-gv8-25f0a1d`
 - `app-debug.apk`: 598,925,999 bytes; SHA-256
-  `00F506D6BFAD1209FB980331AC78B691E577D39245C013A69482FE129788E0DC`
-- `app-debug-androidTest.apk`: 2,255,190 bytes; SHA-256
-  `FAEBE456B0080668A98E27F27E10DDC30560CA57C0BA534C2DDDE3F5FD0944F0`
+  `F63EF6FB0420A7FC69B81F19D736434A05392A91C1209E34BC7CB18FE7F4334F`
+- `app-debug-androidTest.apk`: 2,265,506 bytes; SHA-256
+  `2C3431527FA937823BC45E2432A857FEE6AA504D3179AD9EF2C16215895F8469`
 
 The APK is tied to the source commit above. The later documentation commit does not
 change application or test sources. The phone gate must use this exact APK; the
@@ -28,8 +28,13 @@ The old WebView implementation remains available for non-Steam sites and rollbac
 this issue does not claim the final WebView removal.
 
 Steam avatar/profile detection now parses engine-neutral public page metadata from a
-tightly scoped built-in Gecko content script. The app shows a one-time notice that
-existing WebView authentication cannot be copied and may require a new sign-in.
+tightly scoped app-owned Gecko bridge. Before GeckoView, the helper, or a Steam page
+is composed, a versioned per-profile dialog discloses the exact Steam origins,
+visible public avatar/profile links, private connection back to the app, and possible
+WebView reauthentication. **Allow and continue** is required; Cancel or Back closes
+the screen, loads nothing, does not invoke helper installation, and stores no
+consent. The async broadcast-to-Room update holds Android's receiver lifecycle until
+completion.
 Existing account/session database fields and schema are unchanged.
 
 ## Environment
@@ -53,36 +58,54 @@ Primary exact-HEAD build command:
 ```powershell
 $env:ANDROID_HOME = 'C:\Users\esmer\AppData\Local\Android\Sdk'
 $env:ANDROID_SERIAL = 'emulator-5580'
-.\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug --rerun-tasks
+.\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug lintRelease --rerun-tasks
 ```
 
-Exit 0 in 50 seconds; 79 tasks executed. All 52 unit tests passed with zero
+Exit 0 in 1 minute 17 seconds; 103 tasks executed. All 52 unit tests passed with zero
 failures, errors, or skips. `assembleDebug`, `assembleDebugAndroidTest`, and
-`lintDebug` passed. Debug lint reported zero errors and 120 warnings; independent
-release lint reported zero errors and 52 warnings.
+both lint variants passed. Debug lint reported zero errors and 120 warnings; release
+lint reported zero errors and 52 warnings.
 
-The issue-specific `ProductionGeckoSessionTest` passed twice after the final source
-change and twice again against the committed exact HEAD. It uses two fixed synthetic
-account labels, a random run marker, and a loopback-only page. It verifies:
+The issue-specific `ProductionGeckoSessionTest` passed before commit and twice again
+against the committed exact HEAD. Its three tests use fixed synthetic account labels,
+random run markers, safe public-format detector values, and loopback-only pages. They
+verify:
 
-- the one-time migration notice and explicit acknowledgement;
+- no page load before versioned helper consent;
+- explicit Allow and independent A/B consent;
+- Cancel/Back denial, no page load, and a repeated prompt on reopen;
 - cookie, localStorage, and IndexedDB persistence after closing and reopening A;
 - A to B isolation and B to A restoration;
 - prior browser-generation PID/name disappearance;
 - bounded production stop and reopen;
 - rapid A/B requests ending in only the latest authorized B session; and
-- exactly one production `:browser` worker.
+- exactly one production `:browser` worker; and
+- detector result broadcast through lifecycle-safe receiver completion into the
+  synthetic account's Room row, followed by cleanup.
 
-The primary full instrumentation run passed 25/25 with zero failures, errors, or
-skips in 352.108 seconds. The independent medium tester repeated the focused test
-and the full suite on the same serial. Its full run passed 25/25 with zero failures,
-errors, or skips in 603.704 seconds. Result path:
+The repaired exact-HEAD full instrumentation run passed 27/27 with zero failures,
+errors, or skips in 230.825 seconds. Result path:
 
 `app/build/outputs/androidTest-results/connected/debug/TEST-Codex_GeckoView_Campaign_API_36(AVD) - 16-_app-.xml`
 
-The independent tester found zero app-owned processes after the run. Both primary
-and independent `git diff --check` and clean-worktree checks passed at the exact
-candidate SHA.
+The primary found zero app-owned processes after the run. `git diff --check` and the
+clean-worktree check passed at the exact candidate SHA. The previous medium pass and
+xhigh review at the superseded `4bdcfce` documentation checkpoint were invalidated
+by the source repairs and are not current acceptance evidence.
+
+## Review finding and repair record
+
+The first xhigh review rejected `4bdcfce` because the app-owned detector installed
+before informed consent and the avatar receiver returned before its asynchronous
+database update completed. The repaired commits are:
+
+- `502b7de` — require versioned, purpose-specific helper consent before Gecko
+  composition, with a denial path;
+- `4f6e361` — hold the broadcast lifecycle through the Room update; and
+- `25f0a1d` — cover allow/deny behavior and detector-to-account persistence.
+
+These repairs invalidate the old `00F506...E0DC` APK. Only the exact current APK
+listed above may enter the phone gate after current-head tester/reviewer acceptance.
 
 ## Packaging and rollback checks
 
@@ -100,6 +123,9 @@ no signing key was requested, read, or recorded.
 ## Acceptance notes and limitations
 
 - Deterministic profile mapping and contained no-backup paths have unit coverage.
+- The app-owned detector is fixed APK code, not a supported or replaceable browser
+  extension. Its Steam origins, public fields, and app connection require explicit
+  consent per profile before installation or navigation; denial grants nothing.
 - Production browser storage isolation is directly exercised for cookies,
   localStorage, and IndexedDB. Extension and permission isolation relies on the same
   approved per-profile topology proven in issue #7; the production CSFloat install

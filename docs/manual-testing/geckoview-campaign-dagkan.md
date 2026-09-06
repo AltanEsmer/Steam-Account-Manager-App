@@ -869,15 +869,16 @@ user checklist shortcut. Phone observations cannot replace live emulator proof.
 ## What changed
 
 Selecting Steam for an account now opens the app's production GeckoView session.
-Each account keeps its own persistent browser profile. The old WebView path remains
-available for other sites and rollback. CSFloat production installation is issue
-#10 and is not part of this focused test.
+Each `(account, website)` pair keeps its own persistent browser profile. Before any
+Steam page loads, the app asks permission for its built-in public avatar/profile
+detector. The old WebView path remains available for other sites and rollback.
+CSFloat production installation is issue #10 and is not part of this focused test.
 
 ## Before you start
 
-- Exact application source: `752a8d07fa694ea643b6e020af0ce4973523a73f`.
+- Exact application source: `25f0a1df8e923134bed3f48349eb55f642107644`.
 - Use only the supplied `app-debug.apk`: 598,925,999 bytes; SHA-256
-  `00F506D6BFAD1209FB980331AC78B691E577D39245C013A69482FE129788E0DC`.
+  `F63EF6FB0420A7FC69B81F19D736434A05392A91C1209E34BC7CB18FE7F4334F`.
 - Do not reuse the issue #7 prototype APK. Install this APK as an update; do not
   uninstall the existing debug app first, because that would erase the migration
   state this test needs.
@@ -887,6 +888,8 @@ available for other sites and rollback. CSFloat production installation is issue
   inventory. Call them A and B only; do not report their names.
 - Enter Steam credentials and Steam Guard only on the phone. Do not send them to
   Codex, GitHub, Drive, Discord, or another person.
+- **Cancel** or Android Back denies the profile detector, opens no Steam page, and
+  stores no consent. The prompt appears again on the next attempt.
 - Use a normal trusted network. Stop if Android reports a signature mismatch, the
   APK metadata differs, or the app is not the expected Steam Account Manager debug
   build.
@@ -911,11 +914,15 @@ available for other sites and rollback. CSFloat production installation is issue
 
 5. Open Steam for account A.
 
-   Expected: A message explains that the new isolated browser may require one Steam sign-in.
+   Expected: **Allow Steam profile detection?** appears before any Steam page. It
+   names only `steamcommunity.com` and `www.steamcommunity.com`, visible public
+   avatar/profile links, the private connection back to this app, and the possible
+   one-time sign-in caused by the WebView migration.
 
-6. Press **Continue** on that message.
+6. Press **Allow and continue** on that message.
 
-   Expected: Steam opens inside the app and the message does not claim that old login data was migrated.
+   Expected: Steam opens inside the app only after consent, and the message does not
+   claim that old login data was migrated.
 
 7. Sign in to Steam account A on the phone.
 
@@ -943,9 +950,10 @@ available for other sites and rollback. CSFloat production installation is issue
 
 13. Open Steam for account B.
 
-    Expected: B's separate **Sign in to Steam once** message appears; no account A authenticated page is visible.
+    Expected: B's separate **Allow Steam profile detection?** message appears before
+    any Steam page; no account A authenticated page is visible.
 
-14. Press **Continue** on B's message.
+14. Press **Allow and continue** on B's message.
 
     Expected: Steam opens for B without showing account A's authenticated identity or A's signed-in page.
 
