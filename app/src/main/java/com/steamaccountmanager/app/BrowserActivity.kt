@@ -102,6 +102,10 @@ class BrowserActivity : ComponentActivity() {
                             rollbackInMemory = {
                                 consentPreferences.edit().putBoolean(consentKey, false).apply()
                             },
+                            onRollbackFailure = {
+                                Log.e(TAG, "Consent cache rollback failed; terminating isolated browser process.")
+                                Process.killProcess(Process.myPid())
+                            },
                         )
                     },
                     onClose = { finish() },
@@ -171,12 +175,23 @@ class BrowserActivity : ComponentActivity() {
 internal fun persistDetectorConsentFailClosed(
     persist: () -> Boolean,
     rollbackInMemory: () -> Unit,
+    onRollbackFailure: () -> Unit,
 ): Boolean {
     val persisted = try {
         persist()
     } catch (_: RuntimeException) {
         false
     }
-    if (!persisted) rollbackInMemory()
+    if (!persisted) {
+        try {
+            rollbackInMemory()
+        } catch (_: RuntimeException) {
+            try {
+                onRollbackFailure()
+            } catch (_: RuntimeException) {
+                // Authorization remains denied even if process termination reports an error.
+            }
+        }
+    }
     return persisted
 }

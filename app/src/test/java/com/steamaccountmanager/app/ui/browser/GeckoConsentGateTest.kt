@@ -10,12 +10,12 @@ class GeckoConsentGateTest {
 
     @Test
     fun failedPersistenceKeepsConsentGateClosed() {
-        assertFalse(detectorConsentWasPersisted { false })
+        assertFalse(tryPersistDetectorConsent { false })
     }
 
     @Test
     fun successfulPersistenceAllowsConsentGateToOpen() {
-        assertTrue(detectorConsentWasPersisted { true })
+        assertTrue(tryPersistDetectorConsent { true })
     }
 
     @Test
@@ -26,6 +26,7 @@ class GeckoConsentGateTest {
             persistDetectorConsentFailClosed(
                 persist = { false },
                 rollbackInMemory = { rollbackCount += 1 },
+                onRollbackFailure = {},
             ),
         )
         assertEquals(1, rollbackCount)
@@ -39,8 +40,37 @@ class GeckoConsentGateTest {
             persistDetectorConsentFailClosed(
                 persist = { true },
                 rollbackInMemory = { rollbackCount += 1 },
+                onRollbackFailure = {},
             ),
         )
         assertEquals(0, rollbackCount)
+    }
+
+    @Test
+    fun throwingPersistenceRollsBackAndDoesNotAuthorize() {
+        var rolledBack = false
+
+        assertFalse(
+            persistDetectorConsentFailClosed(
+                persist = { throw IllegalStateException("synthetic persistence failure") },
+                rollbackInMemory = { rolledBack = true },
+                onRollbackFailure = {},
+            ),
+        )
+        assertTrue(rolledBack)
+    }
+
+    @Test
+    fun throwingRollbackInvokesFailClosedFallbackAndDoesNotAuthorize() {
+        var fallbackInvoked = false
+
+        assertFalse(
+            persistDetectorConsentFailClosed(
+                persist = { false },
+                rollbackInMemory = { throw IllegalStateException("synthetic rollback failure") },
+                onRollbackFailure = { fallbackInvoked = true },
+            ),
+        )
+        assertTrue(fallbackInvoked)
     }
 }

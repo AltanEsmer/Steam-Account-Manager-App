@@ -105,7 +105,7 @@ fun GeckoBrowserScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (detectorConsentWasPersisted(persistDetectorConsent)) {
+                    if (tryPersistDetectorConsent(persistDetectorConsent)) {
                         consentPersistenceFailed = false
                         showConsent = false
                     } else {
@@ -274,7 +274,7 @@ fun GeckoBrowserScreen(
     }
 }
 
-internal fun detectorConsentWasPersisted(persist: () -> Boolean): Boolean = try {
+internal fun tryPersistDetectorConsent(persist: () -> Boolean): Boolean = try {
     persist()
 } catch (_: RuntimeException) {
     false
