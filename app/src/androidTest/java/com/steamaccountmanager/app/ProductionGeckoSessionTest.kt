@@ -1,5 +1,6 @@
 package com.steamaccountmanager.app
 
+import android.accessibilityservice.AccessibilityService
 import android.app.ActivityManager
 import android.content.Context
 import android.os.SystemClock
@@ -146,6 +147,16 @@ class ProductionGeckoSessionTest {
             open(context, sessionId, server.url("DENY"))
             waitForText(automation, "Allow Steam profile detection?")
             assertFalse("Denied detector consent was incorrectly persisted", hasExactText(automation, pageMarker))
+            assertTrue(
+                "Android Back action was not accepted",
+                automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK),
+            )
+            waitForTextToDisappear(automation, "Allow Steam profile detection?")
+            assertFalse("Synthetic page appeared after detector consent was denied with Back", hasExactText(automation, pageMarker))
+
+            open(context, sessionId, server.url("DENY"))
+            waitForText(automation, "Allow Steam profile detection?")
+            assertFalse("Back incorrectly persisted detector consent", hasExactText(automation, pageMarker))
             clickText(automation, "Cancel")
             waitForTextToDisappear(automation, "Allow Steam profile detection?")
         } finally {
@@ -167,9 +178,12 @@ class ProductionGeckoSessionTest {
         context: Context,
         vararg sessionIds: SessionIdentifier,
     ) {
-        val editor = context.getSharedPreferences(REAUTH_NOTICE_PREFERENCES, Context.MODE_PRIVATE).edit()
+        val editor = context.getSharedPreferences(
+            BrowserActivity.DETECTOR_CONSENT_PREFERENCES,
+            Context.MODE_PRIVATE,
+        ).edit()
         sessionIds.forEach {
-            editor.remove(DETECTOR_CONSENT_VERSION + GeckoProfileIdentity.idFor(it))
+            editor.remove(BrowserActivity.detectorConsentKey(GeckoProfileIdentity.idFor(it)))
         }
         assertTrue("Could not reset synthetic migration notices", editor.commit())
     }
@@ -351,8 +365,6 @@ class ProductionGeckoSessionTest {
     companion object {
         private const val LOOPBACK_HOST = "127.0.0.1"
         private const val LOOPBACK_PORT = 38949
-        private const val REAUTH_NOTICE_PREFERENCES = "gecko_reauthentication_notices"
-        private const val DETECTOR_CONSENT_VERSION = "steam_profile_detector_consent_v1_"
         private const val UI_TIMEOUT_MS = 30_000L
         private const val POLL_INTERVAL_MS = 100L
     }
