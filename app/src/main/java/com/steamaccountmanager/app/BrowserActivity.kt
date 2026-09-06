@@ -70,29 +70,31 @@ class BrowserActivity : ComponentActivity() {
             finish()
             return
         }
-        val runtime = existing ?: GeckoRuntime.create(
-            applicationContext,
-            GeckoRuntimeSettings.Builder().arguments(arrayOf("--profile", profile.absolutePath)).build(),
-        ).also {
-            sharedRuntime = it
-            sharedProfileId = profileId
+        val runtimeProvider = {
+            sharedRuntime ?: GeckoRuntime.create(
+                applicationContext,
+                GeckoRuntimeSettings.Builder().arguments(arrayOf("--profile", profile.absolutePath)).build(),
+            ).also {
+                sharedRuntime = it
+                sharedProfileId = profileId
+            }
         }
 
-        val noticePreferences = getSharedPreferences(REAUTH_NOTICE_PREFERENCES, MODE_PRIVATE)
-        val showReauthenticationNotice = !noticePreferences.getBoolean(consentKey(profileId), false)
+        val consentPreferences = getSharedPreferences(DETECTOR_CONSENT_PREFERENCES, MODE_PRIVATE)
+        val showDetectorConsent = !consentPreferences.getBoolean(detectorConsentKey(profileId), false)
 
         super.onCreate(savedInstanceState)
         setContent {
             SteamAccountManagerTheme {
                 GeckoBrowserScreen(
-                    runtime = runtime,
+                    runtimeProvider = runtimeProvider,
                     accountId = accountId,
                     websiteId = websiteId,
                     startUrl = startUrl,
                     allowedDomains = allowedDomains,
-                    showReauthenticationNotice = showReauthenticationNotice,
-                    onReauthenticationNoticeAcknowledged = {
-                        noticePreferences.edit().putBoolean(consentKey(profileId), true).apply()
+                    showDetectorConsent = showDetectorConsent,
+                    onDetectorConsentGranted = {
+                        consentPreferences.edit().putBoolean(detectorConsentKey(profileId), true).apply()
                     },
                     onClose = { finish() },
                 )
@@ -123,10 +125,10 @@ class BrowserActivity : ComponentActivity() {
         private const val TAG = "BrowserActivity"
         private const val STEAM_WEBSITE_ID = "steam"
         private const val GECKO_PROFILE_ROOT = "gecko-browser-profiles"
-        private const val REAUTH_NOTICE_PREFERENCES = "gecko_reauthentication_notices"
+        internal const val DETECTOR_CONSENT_PREFERENCES = "gecko_detector_consent"
         private const val DETECTOR_CONSENT_VERSION = "steam_profile_detector_consent_v1_"
 
-        private fun consentKey(profileId: String) = DETECTOR_CONSENT_VERSION + profileId
+        internal fun detectorConsentKey(profileId: String) = DETECTOR_CONSENT_VERSION + profileId
 
         private var sharedRuntime: GeckoRuntime? = null
         private var sharedProfileId: String? = null

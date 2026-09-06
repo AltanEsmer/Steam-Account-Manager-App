@@ -51,13 +51,13 @@ import org.mozilla.geckoview.WebExtension
 /** The production GeckoView surface for the built-in Steam browser journey. */
 @Composable
 fun GeckoBrowserScreen(
-    runtime: GeckoRuntime,
+    runtimeProvider: () -> GeckoRuntime,
     accountId: String,
     websiteId: String,
     startUrl: String,
     allowedDomains: List<String>,
-    showReauthenticationNotice: Boolean,
-    onReauthenticationNoticeAcknowledged: () -> Unit,
+    showDetectorConsent: Boolean,
+    onDetectorConsentGranted: () -> Unit,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -74,7 +74,7 @@ fun GeckoBrowserScreen(
     var canGoForward by remember { mutableStateOf(false) }
     var blockedUri by remember { mutableStateOf<Uri?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var showNotice by remember { mutableStateOf(showReauthenticationNotice) }
+    var showConsent by remember { mutableStateOf(showDetectorConsent) }
 
     fun openExternal(uri: Uri) {
         try {
@@ -84,7 +84,7 @@ fun GeckoBrowserScreen(
         }
     }
 
-    if (showNotice) {
+    if (showConsent) {
         AlertDialog(
             onDismissRequest = onClose,
             title = { Text("Allow Steam profile detection?") },
@@ -99,14 +99,16 @@ fun GeckoBrowserScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    onReauthenticationNoticeAcknowledged()
-                    showNotice = false
+                    onDetectorConsentGranted()
+                    showConsent = false
                 }) { Text("Allow and continue") }
             },
             dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
         )
         return
     }
+
+    val runtime = remember { runtimeProvider() }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Surface(color = MaterialTheme.colorScheme.surface) {
