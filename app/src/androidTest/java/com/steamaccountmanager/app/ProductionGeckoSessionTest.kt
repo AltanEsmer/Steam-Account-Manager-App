@@ -8,6 +8,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.steamaccountmanager.app.browser.BrowserProcessController
 import com.steamaccountmanager.app.browser.GeckoProfileIdentity
+import com.steamaccountmanager.app.browser.SteamLoginDetector
 import com.steamaccountmanager.app.domain.model.SessionIdentifier
 import java.io.BufferedReader
 import java.io.Closeable
@@ -48,9 +49,10 @@ class ProductionGeckoSessionTest {
             server.start()
 
             open(context, accountA, server.url("A"))
-            waitForText(automation, "Sign in to Steam once")
-            clickText(automation, "Continue")
             val aMarker = marker("A", "A", "A", "A")
+            waitForText(automation, "Allow Steam profile detection?")
+            assertFalse("Synthetic page loaded before detector consent", hasExactText(automation, aMarker))
+            clickText(automation, "Allow and continue")
             waitForText(automation, aMarker)
             assertOneBrowserWorker(context)
             val firstGeneration = browserProcesses(context).associate { it.pid to it.processName }
@@ -62,9 +64,10 @@ class ProductionGeckoSessionTest {
             assertOneBrowserWorker(context)
 
             open(context, accountB, server.url("B"))
-            waitForText(automation, "Sign in to Steam once")
-            clickText(automation, "Continue")
             val bMarker = marker("B", "B", "B", "B")
+            waitForText(automation, "Allow Steam profile detection?")
+            assertFalse("Synthetic page loaded before detector consent", hasExactText(automation, bMarker))
+            clickText(automation, "Allow and continue")
             waitForText(automation, bMarker)
             assertOneBrowserWorker(context)
             assertPriorGenerationGone(context, firstGeneration)
@@ -93,6 +96,64 @@ class ProductionGeckoSessionTest {
         }
     }
 
+    @Test
+    fun detectorBroadcastPersistsOnlySyntheticPublicProfileValues() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
+        val app = context as SteamAccountManagerApp
+        val account = app.accountRepository.createAccount("Instrumentation synthetic detector account")
+        val avatarUrl = "https://avatars.steamstatic.com/synthetic_public_avatar.jpg"
+        val steamProfileId = "76561198000000000"
+
+        try {
+            val result = SteamLoginDetector.parseResult(
+                """{"avatarUrl":"$avatarUrl","profileUrl":"https://steamcommunity.com/profiles/$steamProfileId"}""",
+            ) ?: throw AssertionError("Safe synthetic detector result was rejected")
+            SteamLoginDetector.sendResult(result, account.id, context)
+
+            assertTrue("Timed out waiting for the async detector broadcast to persist", waitUntil(UI_TIMEOUT_MS) {
+                runBlocking {
+                    app.accountRepository.getAccount(account.id)?.let {
+                        it.avatarUrl == avatarUrl && it.steamProfileId == steamProfileId
+                    } == true
+                }
+            })
+        } finally {
+            app.accountRepository.getAccount(account.id)?.let { app.accountRepository.deleteAccount(it) }
+        }
+    }
+
+    @Test
+    fun denyingDetectorConsentDoesNotLoadOrPersistConsent() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val sessionId = SessionIdentifier("instrumentation-synthetic-denial", "steam")
+        val server = LoopbackFixture(UUID.randomUUID().toString().replace("-", ""))
+        val pageMarker = marker("DENY", "DENY", "DENY", "DENY")
+
+        try {
+            stopBrowserWorker(context)
+            clearSyntheticNotices(context, sessionId)
+            server.start()
+
+            open(context, sessionId, server.url("DENY"))
+            waitForText(automation, "Allow Steam profile detection?")
+            assertFalse("Synthetic page loaded before detector consent", hasExactText(automation, pageMarker))
+            clickText(automation, "Cancel")
+            waitForTextToDisappear(automation, "Allow Steam profile detection?")
+            assertFalse("Synthetic page appeared after detector consent was denied", hasExactText(automation, pageMarker))
+
+            open(context, sessionId, server.url("DENY"))
+            waitForText(automation, "Allow Steam profile detection?")
+            assertFalse("Denied detector consent was incorrectly persisted", hasExactText(automation, pageMarker))
+            clickText(automation, "Cancel")
+            waitForTextToDisappear(automation, "Allow Steam profile detection?")
+        } finally {
+            stopBrowserWorker(context)
+            server.close()
+        }
+    }
+
     private suspend fun open(context: Context, sessionId: SessionIdentifier, url: String) {
         BrowserProcessController.openWebsite(
             context = context,
@@ -107,7 +168,9 @@ class ProductionGeckoSessionTest {
         vararg sessionIds: SessionIdentifier,
     ) {
         val editor = context.getSharedPreferences(REAUTH_NOTICE_PREFERENCES, Context.MODE_PRIVATE).edit()
-        sessionIds.forEach { editor.remove(GeckoProfileIdentity.idFor(it)) }
+        sessionIds.forEach {
+            editor.remove(DETECTOR_CONSENT_VERSION + GeckoProfileIdentity.idFor(it))
+        }
         assertTrue("Could not reset synthetic migration notices", editor.commit())
     }
 
@@ -289,6 +352,7 @@ class ProductionGeckoSessionTest {
         private const val LOOPBACK_HOST = "127.0.0.1"
         private const val LOOPBACK_PORT = 38949
         private const val REAUTH_NOTICE_PREFERENCES = "gecko_reauthentication_notices"
+        private const val DETECTOR_CONSENT_VERSION = "steam_profile_detector_consent_v1_"
         private const val UI_TIMEOUT_MS = 30_000L
         private const val POLL_INTERVAL_MS = 100L
     }
