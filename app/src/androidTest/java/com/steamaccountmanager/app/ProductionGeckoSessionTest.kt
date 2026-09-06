@@ -124,6 +124,41 @@ class ProductionGeckoSessionTest {
     }
 
     @Test
+    fun steamContentScriptPersistsSyntheticProfileThroughSessionBridge() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val app = context as SteamAccountManagerApp
+        val account = app.accountRepository.createAccount("Instrumentation synthetic bridge account")
+        val sessionId = SessionIdentifier(account.id, "steam")
+
+        try {
+            stopBrowserWorker(context)
+            clearSyntheticDetectorConsent(context, sessionId)
+            BrowserProcessController.openWebsite(
+                context = context,
+                sessionId = sessionId,
+                targetUrl = "https://steamcommunity.com/id/sam-geckoview-synthetic-fixture?sam-synthetic-bridge=1",
+                allowedDomains = listOf("steamcommunity.com"),
+            )
+            waitForText(automation, "Allow Steam profile detection?")
+            clickText(automation, "Allow and continue")
+
+            assertTrue("Timed out waiting for the Steam content-script bridge", waitUntil(UI_TIMEOUT_MS) {
+                runBlocking {
+                    app.accountRepository.getAccount(account.id)?.let {
+                        it.avatarUrl == SYNTHETIC_BRIDGE_AVATAR_URL &&
+                            it.steamProfileId == SYNTHETIC_BRIDGE_PROFILE_ID
+                    } == true
+                }
+            })
+        } finally {
+            stopBrowserWorker(context)
+            app.accountRepository.getAccount(account.id)?.let { app.accountRepository.deleteAccount(it) }
+        }
+    }
+
+    @Test
     fun denyingDetectorConsentDoesNotLoadOrPersistConsent() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext
@@ -389,5 +424,8 @@ class ProductionGeckoSessionTest {
         private const val LOOPBACK_PORT = 38949
         private const val UI_TIMEOUT_MS = 30_000L
         private const val POLL_INTERVAL_MS = 100L
+        private const val SYNTHETIC_BRIDGE_AVATAR_URL =
+            "https://avatars.steamstatic.com/synthetic_bridge_avatar.jpg"
+        private const val SYNTHETIC_BRIDGE_PROFILE_ID = "sam-geckoview-synthetic-bridge"
     }
 }

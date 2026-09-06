@@ -138,7 +138,7 @@ class BrowserActivity : ComponentActivity() {
         private const val STEAM_WEBSITE_ID = "steam"
         private const val GECKO_PROFILE_ROOT = "gecko-browser-profiles"
         internal const val DETECTOR_CONSENT_PREFERENCES = "gecko_detector_consent"
-        private const val DETECTOR_CONSENT_VERSION = "steam_profile_detector_consent_v1_"
+        private const val DETECTOR_CONSENT_VERSION = "steam_profile_detector_consent_v2_"
 
         internal fun detectorConsentKey(profileId: String) = DETECTOR_CONSENT_VERSION + profileId
 

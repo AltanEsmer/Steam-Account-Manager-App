@@ -220,7 +220,8 @@ fun GeckoBrowserScreen(
                         { extension -> geckoView.post {
                             if (sessionRef === session && extension?.id == DETECTOR_EXTENSION_ID) {
                                 detectorExtensionRef = extension
-                                extension.setMessageDelegate(
+                                session.webExtensionController.setMessageDelegate(
+                                    extension,
                                     detectorDelegate(extension, session, accountId, context.applicationContext),
                                     DETECTOR_NATIVE_APP,
                                 )
@@ -237,7 +238,13 @@ fun GeckoBrowserScreen(
                     geckoView
                 },
                 onRelease = { view ->
-                    detectorExtensionRef?.setMessageDelegate(null, DETECTOR_NATIVE_APP)
+                    detectorExtensionRef?.let { extension ->
+                        sessionRef?.webExtensionController?.setMessageDelegate(
+                            extension,
+                            null,
+                            DETECTOR_NATIVE_APP,
+                        )
+                    }
                     detectorExtensionRef = null
                     sessionRef?.let { session ->
                         runtime.webExtensionController.setTabActive(session, false)
