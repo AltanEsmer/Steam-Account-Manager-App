@@ -876,9 +876,9 @@ CSFloat production installation is issue #10 and is not part of this focused tes
 
 ## Before you start
 
-- Exact application source: `efa9bbe49fc9f25924621ce66f71759b538e3bb9`.
-- Use only the supplied `app-debug.apk`: 598,925,999 bytes; SHA-256
-  `37B6BD5FAB54517D017C7C2299B0EA102B114EE12282B3E3D430E4932D5C5434`.
+- Exact application source: `6b1f4b5e34e3e01fa7ed96824563bd8a33561533`.
+- Use only the supplied `app-debug.apk`: 598,942,383 bytes; SHA-256
+  `D17F8D09EB6EBB2FE5BECB1CDED5C00559AD9541CE51EB4BA81E7B823273FC63`.
 - Do not reuse the issue #7 prototype APK. Install this APK as an update; do not
   uninstall the existing debug app first, because that would erase the migration
   state this test needs.
@@ -993,27 +993,31 @@ CSFloat production installation is issue #10 and is not part of this focused tes
 
     Expected: The session returns to signed-in account B, never A.
 
-24. Close Steam Account Manager from Android's recent-apps screen.
+24. Restart the Samsung phone using Android's power menu.
 
-    Expected: Android removes the visible app task without uninstalling or clearing app data.
+    Expected: The phone shuts down and boots to its lock screen without uninstalling the app or clearing its data.
 
-25. Reopen Steam Account Manager.
+25. Unlock the phone.
+
+    Expected: Android returns to the normal home screen.
+
+26. Reopen Steam Account Manager.
 
     Expected: The app returns to its normal account screen and remains responsive.
 
-26. Select test account A.
+27. Select test account A.
 
     Expected: Account A's website list opens.
 
-27. Open Steam for account A.
+28. Open Steam for account A.
 
     Expected: A's correct isolated session is restored and the app remains responsive.
 
-28. Report only the core result to the user.
+29. Report only the core result to the user.
 
     Expected: Report `ISSUE #8 PASS` or `ISSUE #8 FAIL`, Samsung Galaxy S25 Ultra,
     Android 16, approximate test time, whether A stayed A and B stayed B, whether
-    reopening/restarting preserved sessions, and whether avatar/profile detection
+    close/reopen and phone restart preserved sessions, and whether avatar/profile detection
     worked. Do not include account names or authentication evidence.
 
 ## If it fails
@@ -1029,7 +1033,7 @@ recovery procedure.
 
 Share only `PASS` or `FAIL`, the APK commit/checksum confirmation, Samsung Galaxy S25
 Ultra and Android 16, approximate test time, the A/B isolation result, the
-close/reopen and app-restart result, and whether public avatar/profile detection
+close/reopen and phone-restart result, and whether public avatar/profile detection
 worked. A redacted screenshot is optional and must not show authentication or
 account-specific content.
 

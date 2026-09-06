@@ -53,12 +53,14 @@ marketplace remain out of scope. A fixed app-owned Steam profile detector may us
 built-in WebExtension solely as the GeckoView bridge for the existing public
 avatar/profile feature; it is application code bundled with the APK, not a supported
 or replaceable browser extension. Before the Gecko runtime is created, the bridge is
-installed, or any Steam page is loaded, versioned consent for that exact
+installed or activated, or any Steam page is loaded, versioned consent for that exact
 `(account, website)` profile must disclose
 its Steam origins, visible public avatar/profile fields, and private connection back
 to the app. Denial or dismissal loads nothing and grants nothing. Any change to its
 code, manifest permissions, origins, purpose, or data flow requires security review
-and renewed consent.
+and renewed consent. A bridge retained on disk after an earlier valid consent remains
+inert until consent for the current version is recorded because the application does
+not create that profile's Gecko runtime beforehand.
 
 ## Mandatory prototype gate
 
