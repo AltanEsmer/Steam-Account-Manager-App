@@ -876,9 +876,9 @@ CSFloat production installation is issue #10 and is not part of this focused tes
 
 ## Before you start
 
-- Exact application source: `a00004d0f41ad4dda65d20d209cca5fd1947657e`.
-- Use only the supplied `app-debug.apk`: 598,942,383 bytes; SHA-256
-  `DFB3F681AE3C9FEE9413755CB2A2AEE926B4710297CBD5444AC6FE6F5B2A0191`.
+- Exact application source: `f203175c45c14ec764d0f43c4550dbbe137c95ec`.
+- Use only the supplied `app-debug.apk`: 598,942,841 bytes; SHA-256
+  `8432D12371C43153E62F64134AC5160E409ACCFD798B243DC847AB862618C912`.
 - Do not reuse the issue #7 prototype APK. Install this APK as an update; do not
   uninstall the existing debug app first, because that would erase the migration
   state this test needs.

@@ -1,21 +1,21 @@
 # Issue #8 production GeckoView verification receipt
 
-Status: **Machine/emulator verification PASS at application/test source `a00004d`; current-head independent review and focused physical-device Steam smoke test pending**
+Status: **Machine/emulator verification PASS at application/test source `f203175`; current-head independent tester/reviewer and focused physical-device Steam smoke test pending**
 
 ## Exact candidate
 
-- Application/test source commit: `a00004d0f41ad4dda65d20d209cca5fd1947657e`
+- Application/test source commit: `f203175c45c14ec764d0f43c4550dbbe137c95ec`
 - Branch: `codex/geckoview-campaign`
 - Variant: debug, using the production Steam-to-GeckoView routing path
 - GeckoView: `153.0.20260810162159`
 - Preserved evidence directory:
-  `C:\Users\esmer\AppData\Local\Temp\sam-gv8-a00004d`
-- `app-debug.apk`: 598,942,383 bytes; SHA-256
-  `DFB3F681AE3C9FEE9413755CB2A2AEE926B4710297CBD5444AC6FE6F5B2A0191`
-- `app-debug-androidTest.apk`: 2,270,718 bytes; SHA-256
-  `622BDE349CB6B86E61969EDD113DC05BFFB0AFD79ABF64CC064981E0AA343D29`
-- Preserved full instrumentation XML: 4,734 bytes; SHA-256
-  `AF6CE7398DAD8AD260B81135BD2C07E8376B6AE82393DA0BCDB48D7AEE9F6C1B`
+  `C:\Users\esmer\AppData\Local\Temp\sam-gv8-f203175`
+- `app-debug.apk`: 598,942,841 bytes; SHA-256
+  `8432D12371C43153E62F64134AC5160E409ACCFD798B243DC847AB862618C912`
+- `app-debug-androidTest.apk`: 2,278,058 bytes; SHA-256
+  `86D36B0BEFAFE64E0A3C44BF577A3AF83ECA0297B4F82A5EDABF0E880CAA1824`
+- Preserved full instrumentation XML: 4,903 bytes; SHA-256
+  `53ECB330F3F665BF3A6322C09EF72B2EBBD229D4218FE2724701DF436EA58E6F`
 
 The APK is tied to the application/test source commit above. A following
 documentation-only checkpoint does not change the APK or its source. The phone gate
@@ -30,7 +30,10 @@ The old WebView implementation remains available for non-Steam sites and rollbac
 this issue does not claim the final WebView removal.
 
 Steam avatar/profile detection parses engine-neutral public page metadata through a
-tightly scoped app-owned Gecko bridge. Before the Gecko runtime is created, a stored
+tightly scoped app-owned Gecko content-script bridge. Its built-in manifest grants
+content-script native messaging only on the two approved Steam origins, and the app
+registers the receiver on the exact originating Gecko session. Before the Gecko
+runtime is created, a stored
 bridge is activated, a new bridge is installed, or a Steam page is loaded, a
 versioned per-profile dialog discloses the exact Steam origins, visible public
 avatar/profile links, and the private connection back to the app. **Allow and
@@ -72,15 +75,14 @@ wiped. The final clean run followed that recovery.
 
 ## Automated and emulator results
 
-Primary application/unit/lint build command at exact source `a00004d`:
+Primary application/unit/lint build command at exact source `f203175`:
 
 ```powershell
 $env:ANDROID_HOME = 'C:\Users\esmer\AppData\Local\Android\Sdk'
-$env:ANDROID_SERIAL = 'emulator-5580'
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug lintRelease --rerun-tasks --console=plain
 ```
 
-Exit 0 in 54 seconds; 103/103 tasks completed. All 58 unit tests
+Exit 0 in 1 minute; 103/103 tasks completed. All 58 unit tests
 passed with zero failures, errors, or skips. `assembleDebug`,
 `assembleDebugAndroidTest`, and both lint variants passed. Debug lint reported zero
 errors and 121 warnings; release lint reported zero errors and 53 warnings.
@@ -88,15 +90,17 @@ errors and 121 warnings; release lint reported zero errors and 53 warnings.
 The final exact-source emulator command was:
 
 ```powershell
-.\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' connectedDebugAndroidTest --console=plain
+$env:ANDROID_HOME = 'C:\Users\esmer\AppData\Local\Android\Sdk'
+$env:ANDROID_SERIAL = 'emulator-5580'
+.\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' connectedDebugAndroidTest --rerun-tasks --console=plain
 ```
 
-It passed 27/27 instrumentation tests with zero failures, errors, or skips. Gradle
-exited 0 in 3 minutes 32 seconds; the XML records 197.834 test seconds. Result path:
+It passed 28/28 instrumentation tests with zero failures, errors, or skips. Gradle
+exited 0 in 10 minutes 17 seconds; the XML records 570.293 test seconds. Result path:
 
 `app/build/outputs/androidTest-results/connected/debug/TEST-Codex_GeckoView_Campaign_API_36(AVD) - 16-_app-.xml`
 
-The final suite includes all three `ProductionGeckoSessionTest` cases plus the
+The final suite includes all four `ProductionGeckoSessionTest` cases plus the
 prototype regression coverage. The production cases verify:
 
 - no page, bridge activation, or Gecko child process before versioned helper consent;
@@ -110,8 +114,19 @@ prototype regression coverage. The production cases verify:
 - bounded production stop and reopen;
 - rapid A/B requests ending in only the latest authorized B session;
 - exactly one production `:browser` worker; and
-- detector result broadcast through lifecycle-safe receiver completion into the
-  synthetic account's Room row, followed by cleanup.
+- the unchanged production detector content script connecting through the
+  session-scoped native-message delegate and lifecycle-safe receiver into a
+  synthetic account's Room row, followed by cleanup; and
+- detector result validation and persistence independently of the browser bridge.
+
+The end-to-end bridge case uses a debug-only fixture that adds obviously synthetic
+DOM values only for one exact public Steam HTTPS path and query. It runs immediately
+before the unchanged production `content.js`. The merged debug and release detector
+scripts both match source SHA-256
+`0C2CBC20A8D8BFF92D77F61540736AF60D32D1E2FE7D88469EBD4DF43403AC51`;
+the release manifest contains no fixture script. Before the fix, this exact case
+timed out in 33.707 seconds. After the fix it passed alone in 8.166 seconds and as
+part of the four-case production class in 71.522 seconds.
 
 Before the final source checkpoint, the production class passed three repeated
 stress runs after its lifecycle repair (241.303, 228.775, and 263.444 seconds). The
@@ -124,7 +139,12 @@ for cleanup. The corrected external-handoff plus marker-disable sequence passed
 three consecutive runs (47.815, 45.762, and 51.195 seconds).
 
 The primary found zero app-owned processes after the final run. `git diff --check`
-and the clean tracked-worktree check passed at exact source `a00004d`. An earlier
+and the clean tracked-worktree check passed at exact source `f203175`. Two initial
+build launches exited before executing tests because the shell referenced a removed
+JDK path and then lacked the SDK path; the installed Android Studio JBR and Android
+SDK paths were verified before the bounded successful retry. The pre-install app
+data clear reported no package because the freshly rebuilt APK was not installed
+yet; Gradle then installed the exact APKs and ran the suite normally. An earlier
 preceding run at `f2b3475` passed 26/27 but reproduced a prior prototype marker as
 disabled after its interrupted reopen/stop cycle. A focused retry reproduced the
 same failure, so it was repaired rather than treated as transient. The repaired
@@ -167,7 +187,10 @@ The bounded repair commits are:
 - `0712562` — give completed prototype marker state time to flush within the same
   bounded shutdown contract; and
 - `a00004d` — contain both throwing persistence and throwing cache-rollback paths,
-  with authorization remaining denied.
+  with authorization remaining denied;
+- `7164f5e` — grant content-script native messaging, bind the delegate to the exact
+  Gecko session, renew consent, and add real bridge-path coverage; and
+- `f203175` — align required domain/KDoc language with staged engine routing.
 
 The prior tester/reviewer result at `1f03397` was invalidated by these source repairs
 and is not current acceptance evidence. Only the exact APK listed above may enter
@@ -181,15 +204,16 @@ libraries, and the built-in Steam profile detector. Searches found zero release
 matches for the debug prototype activity/process or issue-6 synthetic marker. The
 non-Steam WebView path and dependency remain present for rollback.
 
-At exact source `a00004d`, `bundleRelease --rerun-tasks --console=plain` reached
+At exact source `f203175`, `bundleRelease --rerun-tasks --console=plain` rebuilt the
+production assets, passed compilation, R8, lint-vital, and
 `packageReleaseBundle` and then failed at `signReleaseBundle` because this checkout
 has no release signing configuration. No signing key was requested, read, or
 recorded. The unsigned intermediary artifacts are:
 
-- `intermediary-bundle.aab`: 587,474,047 bytes; SHA-256
-  `CCCA235253AD2E95FDDFC0360813709339501B3EA621A8DADEA8B3CF9CF3CF81`
-- `base.zip`: 530,542,265 bytes; SHA-256
-  `DFBD74915126B023A9B927A690DCBA02D6F2B3E57D2212510D1C27BA497D6DDD`
+- `intermediary-bundle.aab`: 587,475,758 bytes; SHA-256
+  `70FF3F7C71357E42E9378D919DF857BD4C7F086F2D15A3061563C36A9B970702`
+- `base.zip`: 530,542,331 bytes; SHA-256
+  `51FD2592D1E441543BC8B3E630382B526BF82D934CC501A50015158A9A6C604A`
 
 The signing failure is an expected environment limitation, not a successful release
 build. Issue #8's gate artifact is the exact debug APK above.
@@ -207,7 +231,8 @@ build. Issue #8's gate artifact is the exact debug APK above.
   intentionally belongs to issue #10 and is not pulled into issue #8.
 - Steam profile/avatar inputs are bounded and restricted to approved HTTPS Steam
   hosts/CDN values. Detection failure is recoverable and does not block browsing.
-- The emulator uses a synthetic page. It does not prove real Steam authentication,
+- The emulator bridge case depends on public Steam HTTPS availability and injects
+  only synthetic DOM on one exact debug-only fixture URL. It does not prove real Steam authentication,
   Steam Guard behavior, live avatar markup, vendor-specific behavior, or physical
   device persistence. Those are the focused phone gate below.
 - The child-process allowlist matches pinned GeckoView 153's merged manifest and must
