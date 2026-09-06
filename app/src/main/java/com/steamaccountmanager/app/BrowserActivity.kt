@@ -79,7 +79,7 @@ class BrowserActivity : ComponentActivity() {
         }
 
         val noticePreferences = getSharedPreferences(REAUTH_NOTICE_PREFERENCES, MODE_PRIVATE)
-        val showReauthenticationNotice = !noticePreferences.getBoolean(profileId, false)
+        val showReauthenticationNotice = !noticePreferences.getBoolean(consentKey(profileId), false)
 
         super.onCreate(savedInstanceState)
         setContent {
@@ -92,7 +92,7 @@ class BrowserActivity : ComponentActivity() {
                     allowedDomains = allowedDomains,
                     showReauthenticationNotice = showReauthenticationNotice,
                     onReauthenticationNoticeAcknowledged = {
-                        noticePreferences.edit().putBoolean(profileId, true).apply()
+                        noticePreferences.edit().putBoolean(consentKey(profileId), true).apply()
                     },
                     onClose = { finish() },
                 )
@@ -124,6 +124,9 @@ class BrowserActivity : ComponentActivity() {
         private const val STEAM_WEBSITE_ID = "steam"
         private const val GECKO_PROFILE_ROOT = "gecko-browser-profiles"
         private const val REAUTH_NOTICE_PREFERENCES = "gecko_reauthentication_notices"
+        private const val DETECTOR_CONSENT_VERSION = "steam_profile_detector_consent_v1_"
+
+        private fun consentKey(profileId: String) = DETECTOR_CONSENT_VERSION + profileId
 
         private var sharedRuntime: GeckoRuntime? = null
         private var sharedProfileId: String? = null

@@ -84,6 +84,30 @@ fun GeckoBrowserScreen(
         }
     }
 
+    if (showNotice) {
+        AlertDialog(
+            onDismissRequest = onClose,
+            title = { Text("Allow Steam profile detection?") },
+            text = {
+                Text(
+                    "Steam opens in an isolated browser, and your existing WebView sign-in cannot be migrated, " +
+                        "so you may need to sign in again. This app includes a profile detector limited to " +
+                        "https://steamcommunity.com and https://www.steamcommunity.com. It reads only visible " +
+                        "public avatar and profile links and sends those values only back to this app through " +
+                        "its internal connection.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onReauthenticationNoticeAcknowledged()
+                    showNotice = false
+                }) { Text("Allow and continue") }
+            },
+            dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+        )
+        return
+    }
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Surface(color = MaterialTheme.colorScheme.surface) {
             Row(
@@ -223,22 +247,6 @@ fun GeckoBrowserScreen(
                 }
             }
         }
-    }
-
-    if (showNotice) {
-        AlertDialog(
-            onDismissRequest = { showNotice = false },
-            title = { Text("Sign in to Steam once") },
-            text = {
-                Text("Steam now opens in the new isolated browser. Your previous WebView login cannot be migrated, so you may need to sign in again. This GeckoView session will then persist for this account and website.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    onReauthenticationNoticeAcknowledged()
-                    showNotice = false
-                }) { Text("Continue") }
-            },
-        )
     }
 
     blockedUri?.let { uri ->
