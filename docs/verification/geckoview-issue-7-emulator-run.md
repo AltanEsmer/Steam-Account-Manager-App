@@ -1,6 +1,36 @@
 # Issue #7 emulator verification receipt
 
-Status: **Primary machine PASS; independent acceptance and device-test release require the latest PR receipt; no official GO**
+Status: **Human emulator and physical-device gate PASS; issue #7 records GO and is closed; medium tester, xhigh GO-basis review, and ADR amendment remain pending before production #8**
+
+## Current human evidence and issue #7 GO (reported 2026-09-06)
+
+The user and upstream maintainer Dagkan attest that the complete authenticated
+two-account guide passed using the exact released debug candidate and hashes recorded
+below. This is a sanitized human report: no new screenshots, logs, browser storage,
+credentials, account names, or other identifying authentication evidence were
+supplied or inferred.
+
+- Physical device: Samsung Galaxy S25 Ultra, Android 16; gate run approximately
+  2026-09-05 15:15 CEST.
+- Dedicated emulator: `Codex_GeckoView_Campaign_API_36`, `emulator-5580`, Android
+  16/API 36, x86_64. The complete authenticated two-account guide was also reported
+  PASS; no more precise human-run timestamp was supplied.
+- Accounts and live behavior: two safe Steam test accounts; real Steam
+  authentication, official CSFloat injection, the official action, and a genuine
+  observable tracking/status update all passed.
+- Scenario result: GV-01 through GV-16 all PASS on both required targets.
+- Lifecycle and isolation result: A/B activity recreation, screen close/reopen,
+  worker stop/reopen, full app restart, and disable/uninstall plus restore all PASS.
+- Reauthentication: neither login nor Steam Guard was required after initial
+  authentication.
+- Failure record: no failed step and no failure message were reported.
+
+Live issue #7 contains the
+[GO comment](https://github.com/D4gkan/Steam-Account-Manager-App/issues/7#issuecomment-5557925973)
+and is closed. Maintainer permission to close was relayed with the report. This
+records the live human gate outcome, but does not itself complete the remaining
+medium tester review, xhigh GO-basis review, or ADR-0001 amendment. Production issue
+#8 remains blocked until those three items are complete.
 
 ## Current verification candidate: 9e254b2 (2026-09-04)
 

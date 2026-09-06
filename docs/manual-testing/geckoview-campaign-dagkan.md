@@ -3,11 +3,10 @@
 ## Device-test release check
 
 This procedure describes candidate `9e254b2aa8715e3e3703b80e91302cd6db531e21`.
-Its metadata is not approval to install or test it. Before starting, check the latest
-PR receipt and obtain an explicit device-test release for this exact APK. Without
-that release, stop. Never substitute the rejected `17026da` or historical `b81eeab`
-APK. Machine evidence and repair history are maintained in the receipt, not inferred
-from this procedure.
+The released candidate has completed the human emulator and physical-device gate as
+recorded below. Never substitute the rejected `17026da` or historical `b81eeab` APK.
+Machine evidence and repair history are maintained in the receipt, not inferred from
+this procedure.
 The [receipt](../verification/geckoview-issue-7-emulator-run.md) preserves the failed
 baseline, rejected experiments, native port-race evidence, and exact candidate artifacts.
 
@@ -16,8 +15,8 @@ evidence. After explicit release of the device gate, the user supplies observed
 PASS/FAIL outcomes, Samsung model/Android version, and reauthentication notes only.
 Credentials are entered only on the test device, never sent to agents. A phone pass
 does not replace the emulator's live authentication and two-account proof.
-Full emulator and physical-device evidence and official maintainer/reviewer
-acknowledgement of issue #7 `GO` are required before production #8.
+Issue #7 now records `GO` and is closed. The medium tester review, xhigh GO-basis
+review, and ADR amendment remain required before production #8.
 
 This is the living human-test guide for the GeckoView migration campaign. Run only
 the gate whose APK metadata is complete. A gate passes only when every required
@@ -42,7 +41,7 @@ the final compatibility check before any production browser migration may begin.
 - Size: 598,810,380 bytes; SHA-256:
   `D6E639CF0F69915BB065FE2904B112C8A63AA9A426CDE7A5B8EDB9977E32DA89`.
   No PowerShell or checksum work is required from the user.
-- Samsung model and Android version: awaiting the user's confirmation.
+- Physical device: Samsung Galaxy S25 Ultra, Android 16.
 - Run the complete procedure once on the dedicated emulator and once on a supported
   physical Android device running Android 9/API 28 or newer. Codex records the
   emulator's API level and CPU ABI. For the phone, share its exact model and Android
@@ -63,6 +62,29 @@ the final compatibility check before any production browser migration may begin.
   create, accept, or modify a trade for this test.
 - Do not run against a valuable account. Do not intentionally create, accept, or
   modify a trade. Observe tracking/status only with harmless test-account data.
+
+## Recorded human result
+
+The user and upstream maintainer Dagkan report that the exact released candidate
+completed the full authenticated two-account guide with two safe Steam test accounts.
+On the Samsung Galaxy S25 Ultra running Android 16, at approximately
+2026-09-05 15:15 CEST, GV-01 through GV-16 all passed. A/B activity recreation,
+screen close/reopen, worker stop/reopen, full app restart, and disable/uninstall plus
+restore all passed. Real Steam authentication, official CSFloat injection, the
+official action, and a genuine observable tracking/status update passed. Neither
+login nor Steam Guard was required after initial authentication, and no failed step
+or failure message was reported.
+
+The same complete authenticated two-account guide was reported PASS on the dedicated
+Android Studio emulator `Codex_GeckoView_Campaign_API_36` / `emulator-5580` /
+Android 16 API 36 x86_64. No more precise emulator timestamp, screenshots, or logs
+were supplied with this human attestation. The security warning and evidence-sharing
+restrictions below continue to apply.
+
+The live issue has a
+[GO comment](https://github.com/D4gkan/Steam-Account-Manager-App/issues/7#issuecomment-5557925973)
+and is closed with maintainer permission relayed in the task. Production #8 remains
+blocked pending the medium tester review, xhigh GO-basis review, and ADR amendment.
 
 ## Steps
 
