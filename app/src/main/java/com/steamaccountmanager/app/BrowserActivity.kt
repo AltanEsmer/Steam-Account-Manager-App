@@ -145,7 +145,12 @@ class BrowserActivity : ComponentActivity() {
                     Process.killProcess(Process.myPid())
                 }
             }
-            runtime.shutdown()
+            try {
+                runtime.shutdown()
+            } catch (_: UnsatisfiedLinkError) {
+                Log.e(TAG, "Gecko shutdown requested before native runtime initialization; terminating browser worker.")
+                Process.killProcess(Process.myPid())
+            }
         }
     }
 }
