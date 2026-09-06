@@ -868,38 +868,148 @@ user checklist shortcut. Phone observations cannot replace live emulator proof.
 
 ## What changed
 
-This section will test the first production GeckoView session only after issue #7 has
-an official acknowledged `GO`. No issue #8 APK exists yet.
+Selecting Steam for an account now opens the app's production GeckoView session.
+Each account keeps its own persistent browser profile. The old WebView path remains
+available for other sites and rollback. CSFloat production installation is issue
+#10 and is not part of this focused test.
 
 ## Before you start
 
-Do not run this gate yet. The exact issue #8 commit, production-path test APK, size,
-SHA-256, supported Android range, and safe-account requirements will replace this
-paragraph after issue #8 machine verification.
+- Exact application source: `752a8d07fa694ea643b6e020af0ce4973523a73f`.
+- Use only the supplied `app-debug.apk`: 598,925,999 bytes; SHA-256
+  `00F506D6BFAD1209FB980331AC78B691E577D39245C013A69482FE129788E0DC`.
+- Do not reuse the issue #7 prototype APK. Install this APK as an update; do not
+  uninstall the existing debug app first, because that would erase the migration
+  state this test needs.
+- Supported device: Android 9/API 28 or newer. The planned target is Samsung Galaxy
+  S25 Ultra, Android 16, with enough free space for the approximately 599 MB APK.
+- Use two dedicated Steam test accounts with no payment method and no valuable
+  inventory. Call them A and B only; do not report their names.
+- Enter Steam credentials and Steam Guard only on the phone. Do not send them to
+  Codex, GitHub, Drive, Discord, or another person.
+- Use a normal trusted network. Stop if Android reports a signature mismatch, the
+  APK metadata differs, or the app is not the expected Steam Account Manager debug
+  build.
 
 ## Steps
 
-1. Wait for this section to name an exact issue #8 APK and checksum.
+1. Download the supplied issue #8 APK to the Samsung phone.
 
-   Expected: No production-path physical-device test is performed from a placeholder
-   or from the issue #7 prototype APK.
+   Expected: The download completes and names the issue #8 build, not the issue #7 prototype.
+
+2. Install the APK as an update to the existing Steam Account Manager debug app.
+
+   Expected: Android installs the update without requiring the previous app to be uninstalled.
+
+3. Open Steam Account Manager.
+
+   Expected: The existing safe test accounts and website entries are still present.
+
+4. Select test account A.
+
+   Expected: Account A's website list opens without exposing another account's information.
+
+5. Open Steam for account A.
+
+   Expected: A message explains that the new isolated browser may require one Steam sign-in.
+
+6. Press **Continue** on that message.
+
+   Expected: Steam opens inside the app and the message does not claim that old login data was migrated.
+
+7. Sign in to Steam account A on the phone.
+
+   Expected: Steam accepts the safe account's normal authentication flow; all secrets remain on the phone.
+
+8. Confirm that Steam shows account A's signed-in page.
+
+   Expected: The visible identity is A and browsing remains inside the app on allowed Steam pages.
+
+9. Close the in-app browser with its **Close** button.
+
+   Expected: The account screen returns and stays usable.
+
+10. Open Steam for account A again.
+
+    Expected: Account A is still signed in; no second login or Steam Guard challenge is needed unless Steam itself expired the session.
+
+11. Close the in-app browser.
+
+    Expected: The account screen returns normally.
+
+12. Select test account B.
+
+    Expected: Account B's website list opens.
+
+13. Open Steam for account B.
+
+    Expected: B does not show account A's authenticated identity or A's signed-in Steam page.
+
+14. Sign in to Steam account B on the phone.
+
+    Expected: Steam signs in as B without changing A's session.
+
+15. Close the in-app browser.
+
+    Expected: The account screen returns normally.
+
+16. Open Steam for account A.
+
+    Expected: The session returns to signed-in account A, never B.
+
+17. Close the in-app browser.
+
+    Expected: The account screen returns and any detected public avatar/profile metadata belongs to A.
+
+18. Open Steam for account B.
+
+    Expected: The session returns to signed-in account B, never A.
+
+19. Close Steam Account Manager from Android's recent-apps screen.
+
+    Expected: Android removes the visible app task without uninstalling or clearing app data.
+
+20. Reopen Steam Account Manager and open Steam for account A.
+
+    Expected: A's correct isolated session is restored and the app remains responsive.
+
+21. Report only the core result to the user.
+
+    Expected: Report `ISSUE #8 PASS` or `ISSUE #8 FAIL`, Samsung Galaxy S25 Ultra,
+    Android 16, approximate test time, whether A stayed A and B stayed B, whether
+    reopening/restarting preserved sessions, and whether avatar/profile detection
+    worked. Do not include account names or authentication evidence.
 
 ## If it fails
 
-Do not improvise an APK or reuse stale evidence. Report that the guide is incomplete
-for issue #8 so the campaign remains at `HUMAN_GATE_REQUIRED`.
+Stop at the failed step. Close the in-app browser and then the app; do not repeatedly
+submit credentials. Record the step number, `PASS` or `FAIL`, approximate time,
+phone model, Android version, and the exact short error text. If A ever appears in
+B or B appears in A, sign out of both test accounts, stop testing, and report an
+isolation failure. Do not uninstall or clear data unless Codex supplies a new
+recovery procedure.
 
 ## Evidence to share
 
-When this section is activated, share only the requested `PASS`/`FAIL`, exact build
-metadata, Android/device information, and redacted screenshots or bounded logs.
+Share only `PASS` or `FAIL`, the APK commit/checksum confirmation, Samsung Galaxy S25
+Ultra and Android 16, approximate test time, the A/B isolation result, the
+close/reopen and app-restart result, and whether public avatar/profile detection
+worked. A redacted screenshot is optional and must not show authentication or
+account-specific content.
 
 Do not share passwords, Steam Guard codes, QR login screens, cookies, tokens, account names, trades, payment information, or unredacted authentication screenshots.
 
 ## What this test does not prove
 
-Until the exact issue #8 procedure is committed, this placeholder proves nothing and
-does not release issue #9.
+- One Samsung phone and one network do not represent every supported Android device,
+  vendor image, carrier, memory pressure condition, or Steam outage.
+- This focused smoke test does not install or validate production CSFloat; that is
+  issue #10.
+- A successful session does not prove every Steam authentication method, external
+  provider, popup, or future Steam page change.
+- The debug APK is not a signed release artifact and does not prove release signing,
+  Play distribution, download size, battery use, or long-term performance.
+- Issue #9 remains blocked until this exact-build result is reported PASS and accepted.
 
 # Issue #12 final supported-device acceptance
 
