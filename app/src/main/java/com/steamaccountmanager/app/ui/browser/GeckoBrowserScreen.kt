@@ -1,0 +1,280 @@
+package com.steamaccountmanager.app.ui.browser
+
+import android.content.Intent
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.view.ViewGroup
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import com.steamaccountmanager.app.browser.SteamLoginDetector
+import com.steamaccountmanager.app.browser.WebsitePolicy
+import org.json.JSONObject
+import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.WebExtension
+
+/** The production GeckoView surface for the built-in Steam browser journey. */
+@Composable
+fun GeckoBrowserScreen(
+    runtime: GeckoRuntime,
+    accountId: String,
+    websiteId: String,
+    startUrl: String,
+    allowedDomains: List<String>,
+    showReauthenticationNotice: Boolean,
+    onClose: () -> Unit,
+) {
+    val context = LocalContext.current
+    val policy = remember(allowedDomains) {
+        WebsitePolicy(allowedDomains.firstOrNull().orEmpty(), allowedDomains.drop(1))
+    }
+    var sessionRef by remember { mutableStateOf<GeckoSession?>(null) }
+    var currentUrl by remember { mutableStateOf(startUrl) }
+    var title by remember { mutableStateOf(websiteId) }
+    var progress by remember { mutableFloatStateOf(0f) }
+    var loading by remember { mutableStateOf(true) }
+    var canGoBack by remember { mutableStateOf(false) }
+    var canGoForward by remember { mutableStateOf(false) }
+    var blockedUri by remember { mutableStateOf<Uri?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var showNotice by remember { mutableStateOf(showReauthenticationNotice) }
+
+    fun openExternal(uri: Uri) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+        } catch (_: Exception) {
+            error = "No browser is available to open this link."
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Close") }
+                Text(title, modifier = Modifier.weight(1f).padding(horizontal = 4.dp), maxLines = 1)
+                IconButton(onClick = { sessionRef?.goBack() }, enabled = canGoBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                }
+                IconButton(onClick = { sessionRef?.goForward() }, enabled = canGoForward) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, "Forward")
+                }
+                IconButton(onClick = { sessionRef?.reload() }) { Icon(Icons.Filled.Refresh, "Refresh") }
+                IconButton(onClick = { openExternal(Uri.parse(currentUrl)) }) {
+                    Icon(Icons.Filled.OpenInBrowser, "Open externally")
+                }
+            }
+        }
+        if (loading) {
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth().height(2.dp),
+            )
+        }
+        Box(Modifier.fillMaxSize()) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { viewContext ->
+                    val geckoView = GeckoView(viewContext).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        )
+                    }
+                    val session = GeckoSession()
+                    session.navigationDelegate = object : GeckoSession.NavigationDelegate {
+                        override fun onCanGoBack(session: GeckoSession, value: Boolean) {
+                            canGoBack = value
+                        }
+
+                        override fun onCanGoForward(session: GeckoSession, value: Boolean) {
+                            canGoForward = value
+                        }
+
+                        override fun onLocationChange(
+                            session: GeckoSession,
+                            url: String?,
+                            perms: List<GeckoSession.PermissionDelegate.ContentPermission>,
+                            hasUserGesture: Boolean,
+                        ) {
+                            url?.let { currentUrl = it }
+                        }
+
+                        override fun onLoadRequest(
+                            session: GeckoSession,
+                            request: GeckoSession.NavigationDelegate.LoadRequest,
+                        ): GeckoResult<AllowOrDeny> {
+                            val uri = Uri.parse(request.uri)
+                            val allowed = uri.scheme in setOf("http", "https") && policy.isHostAllowed(uri.host)
+                            if (!allowed) blockedUri = uri
+                            if (allowed && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
+                                Handler(Looper.getMainLooper()).post { session.loadUri(request.uri) }
+                                return GeckoResult.fromValue(AllowOrDeny.DENY)
+                            }
+                            return GeckoResult.fromValue(if (allowed) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
+                        }
+                    }
+                    session.progressDelegate = object : GeckoSession.ProgressDelegate {
+                        override fun onPageStart(session: GeckoSession, url: String) {
+                            loading = true
+                            progress = 0f
+                            error = null
+                        }
+
+                        override fun onProgressChange(session: GeckoSession, value: Int) {
+                            progress = value.coerceIn(0, 100) / 100f
+                        }
+
+                        override fun onPageStop(session: GeckoSession, success: Boolean) {
+                            loading = false
+                            if (!success) error = "This website could not be reached."
+                        }
+                    }
+                    session.contentDelegate = object : GeckoSession.ContentDelegate {
+                        override fun onTitleChange(session: GeckoSession, value: String?) {
+                            title = value?.takeIf { it.isNotBlank() } ?: websiteId
+                        }
+                    }
+
+                    session.open(runtime)
+                    geckoView.setSession(session)
+                    runtime.webExtensionController.setTabActive(session, true)
+                    sessionRef = session
+
+                    runtime.webExtensionController.ensureBuiltIn(DETECTOR_URI, DETECTOR_EXTENSION_ID).accept(
+                        { extension -> geckoView.post {
+                            if (sessionRef === session && extension?.id == DETECTOR_EXTENSION_ID) {
+                                extension.setMessageDelegate(
+                                    detectorDelegate(extension, session, accountId, context.applicationContext),
+                                    DETECTOR_NATIVE_APP,
+                                )
+                            }
+                            session.loadUri(startUrl)
+                        } },
+                        { geckoView.post {
+                            if (sessionRef === session) {
+                                error = "Steam profile image detection is unavailable. You can still sign in and browse."
+                                session.loadUri(startUrl)
+                            }
+                        } },
+                    )
+                    geckoView
+                },
+                onRelease = { view ->
+                    sessionRef?.let { session ->
+                        runtime.webExtensionController.setTabActive(session, false)
+                        view.releaseSession()
+                        session.close()
+                    }
+                    sessionRef = null
+                },
+            )
+            error?.let { message ->
+                Box(
+                    Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(message, modifier = Modifier.padding(20.dp))
+                        TextButton(onClick = { error = null; sessionRef?.reload() }) { Text("Try again") }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showNotice) {
+        AlertDialog(
+            onDismissRequest = { showNotice = false },
+            title = { Text("Sign in to Steam once") },
+            text = {
+                Text("Steam now opens in the new isolated browser. Your previous WebView login cannot be migrated, so you may need to sign in again. This GeckoView session will then persist for this account and website.")
+            },
+            confirmButton = { TextButton(onClick = { showNotice = false }) { Text("Continue") } },
+        )
+    }
+
+    blockedUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { blockedUri = null },
+            title = { Text("Leaving this website") },
+            text = { Text("This link goes outside the allowed domains. Open it in your browser instead?") },
+            confirmButton = {
+                TextButton(onClick = { blockedUri = null; openExternal(uri) }) { Text("Open externally") }
+            },
+            dismissButton = { TextButton(onClick = { blockedUri = null }) { Text("Stay here") } },
+        )
+    }
+}
+
+private fun detectorDelegate(
+    extension: WebExtension,
+    selectedSession: GeckoSession,
+    accountId: String,
+    appContext: android.content.Context,
+) = object : WebExtension.MessageDelegate {
+    override fun onConnect(port: WebExtension.Port) {
+        val sender = port.sender
+        val senderIsValid = port.name == DETECTOR_NATIVE_APP &&
+            sender.webExtension.id == DETECTOR_EXTENSION_ID && sender.webExtension.id == extension.id &&
+            sender.environmentType == WebExtension.MessageSender.ENV_TYPE_CONTENT_SCRIPT &&
+            sender.session === selectedSession && sender.isTopLevel &&
+            SteamLoginDetector.looksLikeLoggedInSteamPage(sender.url)
+        if (!senderIsValid) {
+            port.disconnect()
+            return
+        }
+        port.setDelegate(object : WebExtension.PortDelegate {
+            override fun onPortMessage(message: Any, sourcePort: WebExtension.Port) {
+                if (sourcePort !== port || message !is JSONObject || message.optString("type") != "profile") return
+                val allowedKeys = setOf("type", "avatarUrl", "profileUrl")
+                val keys = message.keys().asSequence().toSet()
+                if (keys != allowedKeys) return
+                SteamLoginDetector.parseResult(message.toString())?.let {
+                    SteamLoginDetector.sendResult(it, accountId, appContext)
+                }
+            }
+        })
+    }
+}
+
+private const val DETECTOR_URI = "resource://android/assets/steam-profile-detector/"
+private const val DETECTOR_EXTENSION_ID = "steam-profile-detector@steam-account-manager.invalid"
+private const val DETECTOR_NATIVE_APP = "steamProfileDetector"

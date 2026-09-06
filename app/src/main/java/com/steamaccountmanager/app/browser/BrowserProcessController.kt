@@ -3,6 +3,8 @@ package com.steamaccountmanager.app.browser
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.os.Process
+import android.util.Log
 import com.steamaccountmanager.app.BrowserActivity
 import com.steamaccountmanager.app.domain.model.SessionIdentifier
 import kotlinx.coroutines.Dispatchers
@@ -49,9 +51,9 @@ object BrowserProcessController {
     const val ACTION_SHUTDOWN_BROWSER_PROCESS = "com.steamaccountmanager.app.action.SHUTDOWN_BROWSER_PROCESS"
 
     private const val ROUTER_PREFS = "browser_router_prefs"
-    private const val KEY_ACTIVE_SUFFIX = "active_suffix"
-    private const val SHUTDOWN_POLL_INTERVAL_MS = 30L
-    private const val SHUTDOWN_TIMEOUT_MS = 1_500L
+    private const val KEY_ACTIVE_SESSION = "active_session"
+    private const val SHUTDOWN_POLL_INTERVAL_MS = 100L
+    private const val SHUTDOWN_TIMEOUT_MS = 8_000L
 
     /**
      * Opens [sessionId] at [targetUrl], restricted to [allowedDomains]. Suspends
@@ -66,18 +68,25 @@ object BrowserProcessController {
     ) {
         val appContext = context.applicationContext
         val requestedSuffix = sessionId.dataDirectorySuffix
+        val requestedSession = isolationIdentity(sessionId)
 
-        withContext(Dispatchers.IO) {
+        val authorized = withContext(Dispatchers.IO) {
             val prefs = appContext.getSharedPreferences(ROUTER_PREFS, Context.MODE_PRIVATE)
-            val activeSuffix = prefs.getString(KEY_ACTIVE_SUFFIX, null)
-            val processRunning = isBrowserProcessRunning(appContext)
+            val activeSession = prefs.getString(KEY_ACTIVE_SESSION, null)
+                ?: prefs.getString(LEGACY_KEY_ACTIVE_SUFFIX, null)?.let { "webview_$it" }
+            val processRunning = browserProcesses(appContext).isNotEmpty()
 
-            if (processRunning && activeSuffix != null && activeSuffix != requestedSuffix) {
-                requestShutdownAndAwaitDeath(appContext)
+            if (processRunning && activeSession != requestedSession && !requestShutdownAndAwaitDeath(appContext)) {
+                Log.e(TAG, "Browser session switch timed out; refusing to launch the requested profile.")
+                return@withContext false
             }
 
-            prefs.edit().putString(KEY_ACTIVE_SUFFIX, requestedSuffix).apply()
+            prefs.edit()
+                .putString(KEY_ACTIVE_SESSION, requestedSession)
+                .remove(LEGACY_KEY_ACTIVE_SUFFIX)
+                .commit()
         }
+        if (!authorized) return
 
         val intent = Intent(appContext, BrowserActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -93,24 +102,40 @@ object BrowserProcessController {
     /** Whether the currently-loaded browser session (if any) is this one. */
     fun isSessionCurrentlyActive(context: Context, sessionId: SessionIdentifier): Boolean {
         val prefs = context.getSharedPreferences(ROUTER_PREFS, Context.MODE_PRIVATE)
-        return isBrowserProcessRunning(context) &&
-            prefs.getString(KEY_ACTIVE_SUFFIX, null) == sessionId.dataDirectorySuffix
+        return browserProcesses(context).isNotEmpty() &&
+            prefs.getString(KEY_ACTIVE_SESSION, null) == isolationIdentity(sessionId)
     }
 
-    private fun isBrowserProcessRunning(context: Context): Boolean {
+    private fun browserProcesses(context: Context): List<ActivityManager.RunningAppProcessInfo> {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val targetName = context.packageName + BROWSER_PROCESS_SUFFIX
-        return am.runningAppProcesses.orEmpty().any { it.processName == targetName }
+        val prefix = context.packageName + ":"
+        return am.runningAppProcesses.orEmpty().filter { it.processName.startsWith(prefix) }
     }
 
-    private fun requestShutdownAndAwaitDeath(context: Context) {
-        context.sendBroadcast(Intent(ACTION_SHUTDOWN_BROWSER_PROCESS).setPackage(context.packageName))
+    private fun requestShutdownAndAwaitDeath(context: Context): Boolean {
+        context.sendBroadcast(
+            Intent(context, BrowserShutdownReceiver::class.java).setAction(ACTION_SHUTDOWN_BROWSER_PROCESS),
+        )
         val deadline = System.currentTimeMillis() + SHUTDOWN_TIMEOUT_MS
-        while (isBrowserProcessRunning(context) && System.currentTimeMillis() < deadline) {
+        val workerName = context.packageName + BROWSER_PROCESS_SUFFIX
+        while (System.currentTimeMillis() < deadline) {
+            val processes = browserProcesses(context)
+            if (processes.isEmpty()) return true
+            if (processes.none { it.processName == workerName }) {
+                processes.forEach { Process.killProcess(it.pid) }
+            }
             Thread.sleep(SHUTDOWN_POLL_INTERVAL_MS)
         }
+        return browserProcesses(context).isEmpty()
     }
 
+    private fun isolationIdentity(sessionId: SessionIdentifier): String =
+        if (sessionId.websiteId == STEAM_WEBSITE_ID) GeckoProfileIdentity.idFor(sessionId)
+        else "webview_${sessionId.dataDirectorySuffix}"
+
+    private const val TAG = "BrowserProcessController"
+    private const val STEAM_WEBSITE_ID = "steam"
+    private const val LEGACY_KEY_ACTIVE_SUFFIX = "active_suffix"
     private const val BROWSER_PROCESS_SUFFIX = ":browser"
     const val EXTRA_DATA_DIR_SUFFIX = "extra_data_dir_suffix"
     const val EXTRA_ACCOUNT_ID = "extra_account_id"

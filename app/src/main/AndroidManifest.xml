@@ -38,18 +38,10 @@
         </activity>
 
         <!--
-          BrowserActivity is the ONLY component in the app that ever instantiates a
-          WebView, and it deliberately runs in its own process (":browser").
-
-          This is the crux of the session-isolation design: WebView.setDataDirectorySuffix()
-          may only be called once per process, before the first WebView is created in
-          that process (see README "Session Architecture" section). To give every
-          accountId+websiteId pair a genuinely separate cookie / localStorage / IndexedDB
-          / cache directory, BrowserActivity's process is deliberately restarted every
-          time the user switches to a different account+website pair, with a
-          freshly-computed suffix supplied via the launch Intent. Only one session is
-          ever resident in memory at a time, which also keeps memory use bounded even
-          with ~20 accounts x 5 websites = ~100 possible sessions.
+          BrowserActivity runs one isolated browser session in :browser. Steam uses
+          the gate-approved persistent Gecko profile topology; other websites retain
+          WebView during the reversible migration. Switching sessions restarts this
+          worker so only one engine-owned profile is resident at a time.
         -->
         <activity
             android:name=".BrowserActivity"
@@ -60,10 +52,8 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
 
         <!--
-          Runs in the :browser process (see attribute below, which pins a
-          manifest-registered receiver to a specific process regardless of who
-          sends the broadcast). Used by BrowserProcessController to cleanly tear
-          down the browser process before restarting it for a different session.
+          Runs in :browser and requests graceful engine shutdown before a different
+          isolated session can be authorized.
         -->
         <receiver
             android:name=".browser.BrowserShutdownReceiver"

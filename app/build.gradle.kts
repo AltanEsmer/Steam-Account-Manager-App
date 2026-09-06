@@ -111,6 +111,7 @@ dependencies {
 
     // WebView extras (WebViewClientCompat / WebResourceErrorCompat / feature checks)
     implementation("androidx.webkit:webkit:1.11.0")
+    implementation("org.mozilla.geckoview:geckoview:153.0.20260810162159")
 
     // Security
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
@@ -132,7 +133,6 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-    debugImplementation("org.mozilla.geckoview:geckoview:153.0.20260810162159")
 }
 
 kotlin {
