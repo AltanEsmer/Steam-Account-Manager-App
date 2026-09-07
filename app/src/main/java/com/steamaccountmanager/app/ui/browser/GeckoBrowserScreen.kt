@@ -99,6 +99,8 @@ fun GeckoBrowserScreen(
     var tempXpi by remember { mutableStateOf<File?>(null) }
     var failNextPopupForTest by remember { mutableStateOf(false) }
     var failNextCleanupForTest by remember { mutableStateOf(false) }
+    var failNextDeniedVerificationForTest by remember { mutableStateOf(false) }
+    var pendingDeniedVerification by remember { mutableStateOf(false) }
     var pendingCleanup by remember { mutableStateOf<List<WebExtension>>(emptyList()) }
     var pendingCleanupSuccess by remember { mutableStateOf("") }
     var runtimeRef: GeckoRuntime? = null
@@ -304,27 +306,47 @@ fun GeckoBrowserScreen(
     }
 
     fun verifyDeniedCsfloat() {
+        fun verificationFailed() {
+            clearCsfloat()
+            pendingDeniedVerification = true
+            cleanupBlanking = true
+            sessionRef?.loadUri("about:blank")
+            popupStatus.discoveryFailed()
+            renderPopupStatus()
+            csfloatState =
+                "CSFloat: consent denied but extension state could not be verified. Access was closed; retry inspection."
+        }
+
+        if (debugBuild && failNextDeniedVerificationForTest) {
+            failNextDeniedVerificationForTest = false
+            verificationFailed()
+            return
+        }
         requireNotNull(runtimeRef).webExtensionController.list().accept(
             { extensions ->
                 val matching = extensions.orEmpty().filter { it.id == CsfloatExtensionContract.ID }
                 val enabled = matching.filter { it.metaData.enabled }
                 when {
                     enabled.isNotEmpty() -> {
+                        pendingDeniedVerification = false
                         cleanupCsfloat(enabled, csfloatDenialMessage(CsfloatDenialState.ENABLED))
                     }
                     matching.isNotEmpty() -> {
                         clearCsfloat()
+                        pendingDeniedVerification = false
                         csfloatState = csfloatDenialMessage(CsfloatDenialState.DISABLED)
+                        sessionRef?.loadUri(safeRecoveryUrl)
                     }
                     else -> {
                         clearCsfloat()
+                        pendingDeniedVerification = false
                         csfloatState = csfloatDenialMessage(CsfloatDenialState.ABSENT)
+                        sessionRef?.loadUri(safeRecoveryUrl)
                     }
                 }
             },
             {
-                clearCsfloat()
-                csfloatState = csfloatDenialMessage(CsfloatDenialState.QUERY_FAILED)
+                verificationFailed()
             },
         )
     }
@@ -497,7 +519,11 @@ fun GeckoBrowserScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(csfloatState, modifier = Modifier.weight(1f), maxLines = 2)
-                    TextButton(onClick = { installCsfloat() }, enabled = !csfloatBusy && csfloatExtensionRef == null) {
+                    TextButton(
+                        onClick = { installCsfloat() },
+                        enabled = !csfloatBusy && csfloatExtensionRef == null &&
+                            !pendingDeniedVerification && pendingCleanup.isEmpty(),
+                    ) {
                         Text(if (csfloatBusy) "Installing" else "Install CSFloat")
                     }
                     TextButton(
@@ -531,6 +557,11 @@ fun GeckoBrowserScreen(
                     modifier = Modifier.padding(horizontal = 8.dp),
                 )
                 Row {
+                    if (debugBuild && popupState == CsfloatPopupState.UNAVAILABLE && !pendingDeniedVerification) {
+                        TextButton(onClick = { failNextDeniedVerificationForTest = true }) {
+                            Text("Test denied verification failure")
+                        }
+                    }
                     if (debugBuild && popupState == CsfloatPopupState.AVAILABLE) {
                         TextButton(onClick = { failNextPopupForTest = true }) {
                             Text("Test CSFloat popup failure")
@@ -551,7 +582,8 @@ fun GeckoBrowserScreen(
                             popupStatus.recover()
                             renderPopupStatus()
                             val targets = pendingCleanup
-                            if (targets.isEmpty()) discoverCsfloat()
+                            if (pendingDeniedVerification) verifyDeniedCsfloat()
+                            else if (targets.isEmpty()) discoverCsfloat()
                             else cleanupCsfloat(targets, pendingCleanupSuccess)
                         }) {
                             Text("Retry CSFloat")
