@@ -343,7 +343,7 @@ fun GeckoBrowserScreen(
                         trustInspectionComplete = true
                         if (csfloatQuarantined) {
                             if (clearQuarantineAndRestore()) {
-                                csfloatState = "CSFloat: quarantine cleared; extension absent; browsing restored."
+                                csfloatState = "CSFloat: absent"
                             } else {
                                 csfloatState = "CSFloat: quarantine persistence failed. Access remains closed; retry."
                             }
