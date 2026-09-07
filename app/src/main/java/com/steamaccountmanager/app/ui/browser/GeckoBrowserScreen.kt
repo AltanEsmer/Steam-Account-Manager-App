@@ -1,6 +1,7 @@
 package com.steamaccountmanager.app.ui.browser
 
 import android.content.Intent
+import android.app.Dialog
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -28,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +42,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.steamaccountmanager.app.browser.SteamLoginDetector
 import com.steamaccountmanager.app.browser.WebsitePolicy
+import com.steamaccountmanager.app.browser.CsfloatExtensionContract
+import com.steamaccountmanager.app.browser.CsfloatTracking
+import com.steamaccountmanager.app.browser.CsfloatTrackingState
+import java.io.File
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -47,6 +54,7 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
+import org.mozilla.geckoview.WebExtensionController
 import org.mozilla.geckoview.WebRequestError
 
 /** The production GeckoView surface for the built-in Steam browser journey. */
@@ -62,11 +70,26 @@ fun GeckoBrowserScreen(
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val policy = remember(allowedDomains) {
         WebsitePolicy(allowedDomains.firstOrNull().orEmpty(), allowedDomains.drop(1))
     }
     var sessionRef by remember { mutableStateOf<GeckoSession?>(null) }
     var detectorExtensionRef by remember { mutableStateOf<WebExtension?>(null) }
+    var csfloatExtensionRef by remember { mutableStateOf<WebExtension?>(null) }
+    var csfloatAction by remember { mutableStateOf<WebExtension.Action?>(null) }
+    var csfloatState by remember { mutableStateOf("CSFloat: checking installed state…") }
+    var csfloatBusy by remember { mutableStateOf(false) }
+    var installPromptText by remember { mutableStateOf<String?>(null) }
+    var installPromptResult by remember { mutableStateOf<GeckoResult<WebExtension.PermissionPromptResponse>?>(null) }
+    var updatePinned by remember { mutableStateOf(false) }
+    val tracking = remember { CsfloatTracking() }
+    var trackingState by remember { mutableStateOf(tracking.state) }
+    var popupDialog by remember { mutableStateOf<Dialog?>(null) }
+    var popupView by remember { mutableStateOf<GeckoView?>(null) }
+    var popupSession by remember { mutableStateOf<GeckoSession?>(null) }
+    var tempXpi by remember { mutableStateOf<File?>(null) }
+    var runtimeRef: GeckoRuntime? = null
     var currentUrl by remember { mutableStateOf(startUrl) }
     var title by remember { mutableStateOf(websiteId) }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -88,6 +111,218 @@ fun GeckoBrowserScreen(
             context.startActivity(Intent(Intent.ACTION_VIEW, uri))
         } catch (_: Exception) {
             error = "No browser is available to open this link."
+        }
+    }
+
+    fun renderTracking() {
+        trackingState = tracking.state
+    }
+
+    fun closePopup() {
+        popupDialog?.setOnDismissListener(null)
+        popupDialog?.dismiss()
+        popupDialog = null
+        popupView?.releaseSession()
+        popupView = null
+        popupSession?.close()
+        popupSession = null
+    }
+
+    fun clearCsfloat() {
+        closePopup()
+        csfloatExtensionRef?.let { extension ->
+            extension.setActionDelegate(null)
+            sessionRef?.webExtensionController?.setActionDelegate(extension, null)
+        }
+        csfloatExtensionRef = null
+        csfloatAction = null
+        tracking.unavailable()
+        renderTracking()
+    }
+
+    fun openPopup(request: Long): GeckoResult<GeckoSession> = try {
+        closePopup()
+        val popup = GeckoSession().apply { open(requireNotNull(runtimeRef)) }
+        val view = GeckoView(context).apply { setSession(popup) }
+        val dialog = Dialog(context).apply {
+            setTitle("Official CSFloat popup")
+            setContentView(view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            setOnDismissListener { closePopup() }
+            show()
+        }
+        popupSession = popup
+        popupView = view
+        popupDialog = dialog
+        tracking.popupOpened(request)
+        renderTracking()
+        GeckoResult.fromValue(popup)
+    } catch (_: RuntimeException) {
+        tracking.failed(request)
+        renderTracking()
+        GeckoResult.fromException(IllegalStateException("CSFLOAT_ACTION_FAILED"))
+    }
+
+    val actionDelegate = remember {
+        object : WebExtension.ActionDelegate {
+            override fun onBrowserAction(extension: WebExtension, callbackSession: GeckoSession?, action: WebExtension.Action) {
+                if (extension === csfloatExtensionRef && action.enabled == true) {
+                    csfloatAction = action
+                    tracking.actionAvailable()
+                    renderTracking()
+                }
+            }
+
+            override fun onPageAction(extension: WebExtension, callbackSession: GeckoSession?, action: WebExtension.Action) =
+                onBrowserAction(extension, callbackSession, action)
+
+            override fun onOpenPopup(extension: WebExtension, action: WebExtension.Action): GeckoResult<GeckoSession> {
+                val request = tracking.pendingRequest ?: return GeckoResult.fromValue(null)
+                return openPopup(request)
+            }
+
+            override fun onTogglePopup(extension: WebExtension, action: WebExtension.Action): GeckoResult<GeckoSession> {
+                val request = tracking.pendingRequest ?: return GeckoResult.fromValue(null)
+                return if (popupSession == null) openPopup(request) else {
+                    closePopup()
+                    tracking.popupOpened(request)
+                    renderTracking()
+                    GeckoResult.fromValue(null)
+                }
+            }
+        }
+    }
+
+    fun bindCsfloat(extension: WebExtension) {
+        clearCsfloat()
+        if (!CsfloatExtensionContract.isExpected(extension.id, extension.metaData.version, extension.metaData.signedState) ||
+            !extension.metaData.enabled
+        ) return
+        csfloatExtensionRef = extension
+        extension.setActionDelegate(actionDelegate)
+        sessionRef?.webExtensionController?.setActionDelegate(extension, actionDelegate)
+        csfloatState = "CSFloat: enabled"
+    }
+
+    fun discoverCsfloat() {
+        requireNotNull(runtimeRef).webExtensionController.list().accept(
+            { extensions ->
+                val byId = extensions.orEmpty().filter { it.id == CsfloatExtensionContract.ID }
+                val exact = byId.singleOrNull {
+                    CsfloatExtensionContract.isExpected(it.id, it.metaData.version, it.metaData.signedState)
+                }
+                when {
+                    byId.isNotEmpty() && exact == null -> {
+                        clearCsfloat()
+                        byId.forEach { runtime.webExtensionController.uninstall(it) }
+                        csfloatState = "CSFloat: failed package validation. Unexpected package was rejected; retry."
+                    }
+                    exact == null -> {
+                        clearCsfloat()
+                        csfloatState = "CSFloat: absent"
+                    }
+                    !exact.metaData.enabled -> {
+                        clearCsfloat()
+                        csfloatState = "CSFloat: denied or disabled"
+                    }
+                    else -> bindCsfloat(exact)
+                }
+            },
+            {
+                clearCsfloat()
+                tracking.discoveryFailed()
+                renderTracking()
+                csfloatState = "CSFloat: failed to inspect installed state. Retry."
+            },
+        )
+    }
+
+    fun installCsfloat() {
+        if (csfloatBusy) return
+        csfloatBusy = true
+        csfloatState = "CSFloat: installing verified package…"
+        scope.launch {
+            try {
+                val file = CsfloatExtensionContract.downloadVerified(context.cacheDir)
+                tempXpi = file
+                requireNotNull(runtimeRef).webExtensionController.install(
+                    Uri.fromFile(file).toString(),
+                    WebExtensionController.INSTALLATION_METHOD_FROM_FILE,
+                ).accept(
+                    { extension ->
+                        file.delete()
+                        tempXpi = null
+                        csfloatBusy = false
+                        if (extension != null && CsfloatExtensionContract.isExpected(
+                                extension.id,
+                                extension.metaData.version,
+                                extension.metaData.signedState,
+                            )
+                        ) {
+                            bindCsfloat(extension)
+                            sessionRef?.reload()
+                        } else {
+                            extension?.let { requireNotNull(runtimeRef).webExtensionController.uninstall(it) }
+                            clearCsfloat()
+                            csfloatState = "CSFloat: failed package validation. Unexpected package was rejected."
+                        }
+                    },
+                    {
+                        file.delete()
+                        tempXpi = null
+                        csfloatBusy = false
+                        discoverCsfloat()
+                    },
+                )
+            } catch (_: Exception) {
+                tempXpi?.delete()
+                tempXpi = null
+                csfloatBusy = false
+                csfloatState = "CSFloat: download verification failed. Check the network and retry."
+            }
+        }
+    }
+
+    val promptDelegate = remember {
+        object : WebExtensionController.PromptDelegate {
+            override fun onInstallPromptRequest(
+                extension: WebExtension,
+                permissions: Array<out String>,
+                origins: Array<out String>,
+                dataCollectionPermissions: Array<out String>,
+            ): GeckoResult<WebExtension.PermissionPromptResponse> {
+                if (extension.id != CsfloatExtensionContract.ID || extension.metaData.version != CsfloatExtensionContract.VERSION) {
+                    csfloatState = "CSFloat: install request identity mismatch. Access denied."
+                    return GeckoResult.fromValue(WebExtension.PermissionPromptResponse(false, false, false))
+                }
+                return GeckoResult<WebExtension.PermissionPromptResponse>().also {
+                    installPromptResult = it
+                    installPromptText = CsfloatExtensionContract.prompt(
+                        extension.metaData.name,
+                        extension.id,
+                        extension.metaData.version,
+                        permissions.toList(),
+                        origins.toList(),
+                        dataCollectionPermissions.toList(),
+                    )
+                }
+            }
+
+            override fun onUpdatePrompt(
+                extension: WebExtension,
+                newPermissions: Array<out String>,
+                newOrigins: Array<out String>,
+                newDataCollectionPermissions: Array<out String>,
+            ): GeckoResult<AllowOrDeny> {
+                updatePinned = true
+                return GeckoResult.fromValue(AllowOrDeny.DENY)
+            }
+
+            override fun onOptionalPrompt(
+                extension: WebExtension,
+                permissions: Array<out String>,
+                origins: Array<out String>,
+                dataCollectionPermissions: Array<out String>,
+            ) = GeckoResult.fromValue(AllowOrDeny.DENY)
         }
     }
 
@@ -125,25 +360,72 @@ fun GeckoBrowserScreen(
     }
 
     val runtime = remember { getOrCreateRuntimeAfterConsent() }
+    runtimeRef = runtime
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Surface(color = MaterialTheme.colorScheme.surface) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Close") }
-                Text(title, modifier = Modifier.weight(1f).padding(horizontal = 4.dp), maxLines = 1)
-                IconButton(onClick = { sessionRef?.goBack() }, enabled = canGoBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Close") }
+                    Text(title, modifier = Modifier.weight(1f).padding(horizontal = 4.dp), maxLines = 1)
+                    IconButton(onClick = { sessionRef?.goBack() }, enabled = canGoBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                    IconButton(onClick = { sessionRef?.goForward() }, enabled = canGoForward) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, "Forward")
+                    }
+                    IconButton(onClick = { sessionRef?.reload() }) { Icon(Icons.Filled.Refresh, "Refresh") }
+                    IconButton(onClick = { openExternal(Uri.parse(currentUrl)) }) {
+                        Icon(Icons.Filled.OpenInBrowser, "Open externally")
+                    }
                 }
-                IconButton(onClick = { sessionRef?.goForward() }, enabled = canGoForward) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, "Forward")
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(csfloatState, modifier = Modifier.weight(1f), maxLines = 2)
+                    TextButton(onClick = { installCsfloat() }, enabled = !csfloatBusy && csfloatExtensionRef == null) {
+                        Text(if (csfloatBusy) "Installing" else "Install CSFloat")
+                    }
+                    TextButton(
+                        onClick = {
+                            val action = csfloatAction ?: return@TextButton
+                            tracking.request {
+                                try {
+                                    action.click()
+                                } catch (_: RuntimeException) {
+                                    tracking.failed()
+                                }
+                            }
+                            renderTracking()
+                        },
+                        enabled = csfloatAction != null && tracking.pendingRequest == null,
+                    ) { Text("Open CSFloat") }
                 }
-                IconButton(onClick = { sessionRef?.reload() }) { Icon(Icons.Filled.Refresh, "Refresh") }
-                IconButton(onClick = { openExternal(Uri.parse(currentUrl)) }) {
-                    Icon(Icons.Filled.OpenInBrowser, "Open externally")
+                Text(
+                    when (trackingState) {
+                        CsfloatTrackingState.UNAVAILABLE -> "Tracking: unavailable"
+                        CsfloatTrackingState.READY -> "Tracking: official action ready"
+                        CsfloatTrackingState.ACTIVE -> "Tracking: active (visible official status recorded)"
+                        CsfloatTrackingState.FAILED -> "Tracking: action failed; retry discovery"
+                    },
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+                Row {
+                    TextButton(
+                        onClick = { tracking.recordVisibleStatus(); renderTracking() },
+                        enabled = trackingState == CsfloatTrackingState.READY && tracking.officialSurfaceOpened,
+                    ) { Text("Record visible CSFloat status") }
+                    if (trackingState == CsfloatTrackingState.FAILED) {
+                        TextButton(onClick = { tracking.recover(); renderTracking(); discoverCsfloat() }) {
+                            Text("Retry CSFloat")
+                        }
+                    }
                 }
+                if (updatePinned) Text("CSFloat update denied: reviewed version 5.17.0 remains pinned.", Modifier.padding(8.dp))
             }
         }
         if (loading) {
@@ -250,6 +532,8 @@ fun GeckoBrowserScreen(
                     geckoView.setSession(session)
                     runtime.webExtensionController.setTabActive(session, true)
                     sessionRef = session
+                    runtime.webExtensionController.promptDelegate = promptDelegate
+                    discoverCsfloat()
 
                     runtime.webExtensionController.ensureBuiltIn(DETECTOR_URI, DETECTOR_EXTENSION_ID).accept(
                         { extension -> geckoView.post {
@@ -273,6 +557,13 @@ fun GeckoBrowserScreen(
                     geckoView
                 },
                 onRelease = { view ->
+                    installPromptResult?.complete(WebExtension.PermissionPromptResponse(false, false, false))
+                    installPromptResult = null
+                    installPromptText = null
+                    runtime.webExtensionController.promptDelegate = null
+                    clearCsfloat()
+                    tempXpi?.delete()
+                    tempXpi = null
                     detectorExtensionRef?.let { extension ->
                         sessionRef?.webExtensionController?.setMessageDelegate(
                             extension,
@@ -316,6 +607,34 @@ fun GeckoBrowserScreen(
                 TextButton(onClick = { blockedUri = null; openExternal(uri) }) { Text("Open externally") }
             },
             dismissButton = { TextButton(onClick = { blockedUri = null }) { Text("Stay here") } },
+        )
+    }
+
+    installPromptText?.let { prompt ->
+        AlertDialog(
+            onDismissRequest = {
+                installPromptResult?.complete(WebExtension.PermissionPromptResponse(false, false, false))
+                installPromptResult = null
+                installPromptText = null
+                csfloatState = "CSFloat: consent denied; browsing remains available."
+            },
+            title = { Text("Install-time CSFloat access request") },
+            text = { Text(prompt) },
+            confirmButton = {
+                TextButton(onClick = {
+                    installPromptResult?.complete(WebExtension.PermissionPromptResponse(true, false, false))
+                    installPromptResult = null
+                    installPromptText = null
+                }) { Text("Accept CSFloat access") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    installPromptResult?.complete(WebExtension.PermissionPromptResponse(false, false, false))
+                    installPromptResult = null
+                    installPromptText = null
+                    csfloatState = "CSFloat: consent denied; browsing remains available."
+                }) { Text("Deny CSFloat access") }
+            },
         )
     }
 }
