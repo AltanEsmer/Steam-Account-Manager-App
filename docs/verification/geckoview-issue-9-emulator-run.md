@@ -131,4 +131,3 @@ inspection preceded the one successful launch retry.
 - Accessibility automation proves the supported browser-shell flow on the dedicated
   API-36 x86_64 AVD. It does not claim every external app, vendor device, network
   failure, popup, or future page behavior.
-
