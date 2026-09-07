@@ -7,6 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 
 class GeckoConsentGateTest {
 
@@ -14,6 +15,7 @@ class GeckoConsentGateTest {
     fun failedOrThrowingQuarantinePersistenceStaysClosed() {
         assertFalse(tryPersistCsfloatQuarantine { false })
         assertFalse(tryPersistCsfloatQuarantine { throw IllegalStateException("synthetic failure") })
+        assertFalse(tryPersistCsfloatQuarantine { throw IOException("synthetic I/O failure") })
     }
 
     @Test
