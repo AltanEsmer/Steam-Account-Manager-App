@@ -2,10 +2,10 @@
 
 ## Build and environment
 
-- Source/test checkpoint: `01e41faadd51619ff8a5506df4f6c3c129c26815`
-- Production implementation checkpoint: `01e41faadd51619ff8a5506df4f6c3c129c26815`
+- Source/test checkpoint: `4d131d44746e0ffd5db6a32bfb2ecd1d232518d1`
+- Production implementation checkpoint: `4d131d44746e0ffd5db6a32bfb2ecd1d232518d1`
 - Starting checkpoint: `1a112ab71cd0ff41caad7164a65d1acb9949f20c`
-- Verification timestamp: `2026-09-07T19:03:27+02:00`
+- Verification timestamp: `2026-09-07T20:10:56+02:00`
 - Host: Windows 11 Pro `10.0.26200`, build 26200
 - Android Studio: 2025.2.1, `AI-252.25557.131.2521.14432022`
 - Variant: `debug`
@@ -14,18 +14,18 @@
 - GeckoView: `153.0.20260810162159`
 - CSFloat: official signed 5.17.0, ID
   `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}`, observed signed state `2`
-- App APK: 599,601,742 bytes, SHA-256
-  `BB78F6B0927008D2D292EA99CF092C44F138863CF416495A031C1E815F2DA2F2`
-- Test APK: 2,421,623 bytes, SHA-256
-  `B54ECB1A96FEDBCFE0CCA77526DF99B58C21B9C3F514FC3C093C24178F0C1A7C`
+- App APK: 599,123,065 bytes, SHA-256
+  `335D422D2986CE4B248C8129D22C2CF2F3D9C297557F5583FA9D4291E98F524F`
+- Test APK: 2,315,006 bytes, SHA-256
+  `7BEA651CE3F3754ECC0E160DC365929B9B00CBAEB150ADE8C51742009EF32281`
 
 Every device command used `adb -s emulator-5580`. Installation initially lacked
 temporary space, so only the prior scoped app and test packages were removed before
 installing these APKs; no unrelated package or emulator state was changed.
 The app used Android incremental installation because the universal APK exceeded the
 package manager's temporary-space reserve. The earlier pulled `base.apk` matched its
-local candidate byte-for-byte; both bounded-repair runs used clean incremental installs
-of the exact final APK recorded above.
+local candidate byte-for-byte; the final focused, full-suite, and restart runs used
+clean incremental installs of the exact final APK recorded above.
 
 ## Commands and results
 
@@ -96,6 +96,26 @@ OK (1 test), 51.904s
 
 durable restoration fence, second clean exact install, lifecycle run 2
 OK (1 test), 51.074s
+
+shared-owner + controller-update candidate focused lifecycle run
+OK (1 test), 55.454s
+
+gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug lintRelease --rerun-tasks
+BUILD SUCCESSFUL (1m04s), 103/103 tasks; 70/70 unit tests; zero lint errors
+
+fresh exact install; pulled app and test base APKs
+local/device size and SHA-256 matched for both APKs
+
+full shared-owner candidate instrumentation
+OK (34 tests), 620.066s
+
+clean exact reinstall; shared-owner fixed-profile default phase
+OK (1 test), 52.625s
+
+adb -s emulator-5580 shell am force-stop com.steamaccountmanager.app.debug
+
+same method with -e issue11RestartPhase verify-after-force-stop
+OK (1 test), 12.533s
 ```
 
 The five-test run covered install denial and acceptance, callback-derived required
@@ -131,6 +151,20 @@ successful runs after a prior run showed only official-artifact download timeout
 the host artifact returned HTTP 200 with the pinned 7,011,169-byte length, and the
 emulator reported a validated network with the artifact host's port 443 reachable.
 
+The final reviewer identified that a screen-local generation could not own an
+in-flight Gecko mutation across activity replacement. The final repair gives each
+screen a process/profile-scoped operation token while the profile-local pending file
+remains the process-death fence. Screen release invalidates the token globally, and
+cleanup, denied-install verification, discovery, mutation, install, update, delayed
+polling, and nested callbacks all require current ownership before changing pending
+state, trust, installed-extension state, or trusted UI. The public lifecycle test now
+closes and reopens during both Enable and accepted Reinstall. The debug update action
+also awaits the real `WebExtensionController.update` attempt; Gecko's documented null
+no-update result and an exact returned result both require a fresh exact signed-enabled
+re-list, while changed metadata quarantines. The final exact candidate passed the
+focused lifecycle test, 34/34 full instrumentation, and the external force-stop
+sequence with no owned process left running.
+
 Immediately after the incremental reinstall, two setup attempts timed out before the
 initial detector-consent screen because an Android `System UI isn't responding`
 dialog covered the launcher; UI hierarchy confirmed no product activity was resumed.
@@ -145,14 +179,17 @@ After choosing the system dialog's Wait action, all required post-repair runs pa
   Gecko callback, then require a non-null list with the exact reviewed ID, version,
   signed state, and requested enabled flag before restoring browsing.
 - Enable and reinstall persist a profile-local pending-restoration marker before
-  mutation. A replacement screen stays quarantined while exact metadata is stale or
-  absent; only a fresh exact enabled re-list clears pending state and quarantine. The
-  public lifecycle test closes/reopens immediately after Enable and accepted reinstall.
+  mutation. A process/profile-scoped ownership token invalidates callbacks from a
+  released screen. A replacement screen stays quarantined while exact metadata is
+  stale or absent; only its current-owner fresh exact enabled re-list clears pending
+  state and quarantine. The public lifecycle test closes/reopens immediately after
+  Enable and accepted reinstall.
 - Uninstall reuses the hardened cleanup path and restores only after list-confirmed
   absence. Reinstall reuses the verified installer and Gecko prompt delegate.
-- The debug update trigger calls the production prompt delegate's actual
-  `onUpdatePrompt`, awaits `DENY`, and re-lists the exact signed enabled package before
-  reporting unchanged state.
+- The debug update trigger awaits the production prompt delegate's actual `DENY`,
+  invokes and awaits `WebExtensionController.update`, and then re-lists the exact
+  signed enabled package before reporting unchanged state. The pinned reviewed XPI
+  has no `update_url`; null/no-update is never trusted without that exact re-list.
 - Screen close/reopen, A/B process switching, explicit browser-process recreation,
   and route reopen are public production-shell checks. The existing production
   session lifecycle test separately covers repeated close/reopen, profile switching,
