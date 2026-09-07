@@ -499,6 +499,61 @@ class ProductionGeckoSessionTest {
         }
     }
 
+    @Test
+    fun productionCsfloatCanBeDisabledEnabledUninstalledReinstalledAndKeepsOtherSessionAbsent() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val marker = UUID.randomUUID().toString().replace("-", "")
+        val sessionA = SessionIdentifier("instrumentation-csfloat-revoke-a-$marker", "steam")
+        val sessionB = SessionIdentifier("instrumentation-csfloat-revoke-b-$marker", "steam")
+        val steamListing = "https://steamcommunity.com/market/listings/730/AK-47"
+
+        try {
+            stopBrowserWorker(context)
+            clearSyntheticDetectorConsent(context, sessionA, sessionB)
+            BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
+            waitForText(automation, "Allow Steam profile detection?")
+            clickText(automation, "Allow and continue")
+            waitForTextContaining(automation, "CSFloat: absent")
+            clickText(automation, "Install CSFloat")
+            waitForText(automation, "Install-time CSFloat access request")
+            clickText(automation, "Accept CSFloat access")
+            waitForTextContaining(automation, "CSFloat: enabled (5.17.0, signed)")
+
+            clickText(automation, "Disable CSFloat")
+            waitForTextContaining(automation, "CSFloat: disabled (5.17.0, signed)")
+            waitForTextContaining(automation, "CSFloat popup: unavailable")
+            clickText(automation, "Enable CSFloat")
+            waitForTextContaining(automation, "CSFloat: enabled (5.17.0, signed)")
+
+            clickText(automation, "Test pinned CSFloat update")
+            waitForTextContaining(automation, "CSFloat update denied: reviewed version 5.17.0 remains pinned.")
+            clickText(automation, "Uninstall CSFloat")
+            waitForTextContaining(automation, "CSFloat: absent")
+
+            BrowserProcessController.openWebsite(context, sessionB, steamListing, listOf("steamcommunity.com"))
+            waitForText(automation, "Allow Steam profile detection?")
+            clickText(automation, "Allow and continue")
+            waitForTextContaining(automation, "CSFloat: absent")
+
+            BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
+            waitForTextContaining(automation, "CSFloat: absent")
+            clickText(automation, "Install CSFloat")
+            waitForText(automation, "Install-time CSFloat access request")
+            clickText(automation, "Accept CSFloat access")
+            waitForTextContaining(automation, "CSFloat: enabled (5.17.0, signed)")
+
+            stopBrowserWorker(context)
+            BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
+            waitForTextContaining(automation, "CSFloat: enabled (5.17.0, signed)")
+            BrowserProcessController.openWebsite(context, sessionB, steamListing, listOf("steamcommunity.com"))
+            waitForTextContaining(automation, "CSFloat: absent")
+        } finally {
+            stopBrowserWorker(context)
+        }
+    }
+
     private suspend fun open(context: Context, sessionId: SessionIdentifier, url: String) {
         BrowserProcessController.openWebsite(
             context = context,
