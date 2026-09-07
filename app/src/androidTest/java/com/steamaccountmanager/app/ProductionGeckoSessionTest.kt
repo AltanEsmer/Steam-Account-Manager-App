@@ -427,7 +427,7 @@ class ProductionGeckoSessionTest {
     }
 
     @Test
-    fun productionCsfloatAcceptsOpensPopupAndRemainsIsolatedByBrowserSession() = runBlocking {
+    fun productionCsfloatTransitionsFromUnavailableToOfficialTrackingPopupAndRemainsIsolated() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext
         val automation = instrumentation.uiAutomation
@@ -444,6 +444,8 @@ class ProductionGeckoSessionTest {
             waitForText(automation, "Allow Steam profile detection?")
             clickText(automation, "Allow and continue")
             waitForTextContaining(automation, "CSFloat: absent")
+            waitForTextContaining(automation, "CSFloat popup: unavailable")
+            assertControlEnabled(automation, "Open CSFloat", false)
             clickText(automation, "Install CSFloat")
             waitForText(automation, "Install-time CSFloat access request")
             waitForTextContaining(automation, "ID: {194d0dc6-7ada-41c6-88b8-95d7636fe43c}")
@@ -454,6 +456,7 @@ class ProductionGeckoSessionTest {
                 automation,
                 "CSFloat popup: available. Inspect tracking status inside the official popup.",
             )
+            assertControlEnabled(automation, "Open CSFloat", true)
             clickText(automation, "Test CSFloat popup failure")
             clickText(automation, "Open CSFloat")
             waitForTextContaining(automation, "CSFloat: official popup failed to open. Retry.")
