@@ -108,7 +108,7 @@ $env:ANDROID_SERIAL = 'emulator-5580'
 
 Exit 0 in 55 seconds; all 103 tasks executed. All 67 unit tests passed with
 zero failures, errors, or skips. Debug and Android-test APK assembly passed. Debug
-lint reported 123 warnings and zero errors; release lint reported 55 warnings and
+lint reported 124 warnings and zero errors; release lint reported 56 warnings and
 zero errors. The result XML files are under
 `app\build\test-results\testDebugUnitTest`, while lint XML is under
 `app\build\reports`.
