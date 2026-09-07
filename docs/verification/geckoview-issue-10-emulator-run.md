@@ -1,20 +1,20 @@
 # Issue #10 production CSFloat verification receipt
 
-Status: **Machine/emulator verification PASS at application/test source `de7bdd7`**
+Status: **Machine/emulator verification PASS at application/test source `a07a64e`**
 
 ## Exact candidate
 
-- Application/test source: `de7bdd7186bd6c758dcc7563deae83b8c58470c3`
+- Application/test source: `a07a64eae8cf0f2b76a71c54facee88adaf8d0df`
 - Starting checkpoint: `31f9fadbf16dd3aa1defc4c4aff132def1f738f7`
 - Branch: `codex/geckoview-campaign`
 - Variant: debug
 - Preserved evidence directory:
-  `C:\Users\esmer\AppData\Local\Temp\sam-gv10-de7bdd7`
+  `C:\Users\esmer\AppData\Local\Temp\sam-gv10-a07a64e`
 - `app-debug.apk`: 599,073,913 bytes; SHA-256
-  `7325D4C4E0CCEE38269EDA24A4EA71808D082E55E8FCF47C51E250D2A388B1F9`
+  `5EEE5DA430B26156278C2D34796B05493861E3E40D34235C57CC7C93E4E3F1F2`
 - `app-debug-androidTest.apk`: 2,304,982 bytes; SHA-256
   `0297505C9AED14E4EF9C9A8CF4C3F8B36032B18B185881E0F13EC1B821AD3C23`
-- Verification completed: 2026-09-07 14:50 CEST
+- Verification completed: 2026-09-07 15:55 CEST
 
 ## Approved extension artifact
 
@@ -98,7 +98,18 @@ Back, Forward, Refresh, installation, and all non-blank in-app loads are blocked
 startup waits for both detector readiness and extension trust inspection; and only
 confirmed absence/disablement clears the marker and restores the preserved safe URL.
 
-The fresh unit/build/lint command at exact source `de7bdd7` was:
+A second final review found that positive quarantine-marker write failure, nullable
+Gecko list results, and persisted full recovery URLs still left failure/privacy
+gaps. Commits `ce17ca3` through `a07a64e` invert the durable state: a tiny
+`.csfloat-trusted` sentinel inside the deterministic no-backup Gecko profile means
+the last extension state was verified; marker absence defaults to quarantine.
+Installation removes trust before downloading, and only verified absence,
+disablement, cleanup, or a freshly consented exact signed install may recreate it.
+Boolean failures and ordinary I/O exceptions keep the session blank and retryable.
+Successful-null extension lists now fail closed, and no URL is persisted at all.
+The current authorized launch URL is kept only in memory for external recovery.
+
+The fresh unit/build/lint command at exact source `a07a64e` was:
 
 ```powershell
 $env:ANDROID_HOME = 'C:\Users\esmer\AppData\Local\Android\Sdk'
@@ -106,9 +117,9 @@ $env:ANDROID_SERIAL = 'emulator-5580'
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug lintRelease --rerun-tasks --console=plain
 ```
 
-Exit 0 in 55 seconds; all 103 tasks executed. All 67 unit tests passed with
+Exit 0 in 57 seconds; all 103 tasks executed. All 69 unit tests passed with
 zero failures, errors, or skips. Debug and Android-test APK assembly passed. Debug
-lint reported 124 warnings and zero errors; release lint reported 56 warnings and
+lint reported 123 warnings and zero errors; release lint reported 55 warnings and
 zero errors. The result XML files are under
 `app\build\test-results\testDebugUnitTest`, while lint XML is under
 `app\build\reports`.
@@ -123,7 +134,7 @@ $adb = 'C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
 
 The dedicated AVD remained storage-constrained. After verifying the exact package
 names, only the campaign-owned debug and test packages were uninstalled; both
-removals exited 0. The exact `de7bdd7` main APK then installed incrementally and the
+removals exited 0. The exact `a07a64e` main APK then installed incrementally and the
 exact test APK installed by streaming, both with exit 0.
 
 The final full emulator command was:
@@ -132,7 +143,7 @@ The final full emulator command was:
 & $adb -s emulator-5580 shell am instrument -w -r com.steamaccountmanager.app.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-Exit 0; 33/33 tests passed in 375.784 seconds. The runner exercised the complete
+Exit 0; 33/33 tests passed in 397.072 seconds. The runner exercised the complete
 production CSFloat denial and acceptance paths; official-popup rendering;
 popup-failure/retry; cleanup-failure, immediate safe blanking, retry, and
 list-confirmed absence; denied-verification failure, safe blanking, disabled
@@ -147,7 +158,7 @@ tracking update, and the app does not claim otherwise.
 
 After the run, the app and test packages were force-stopped and `pidof` returned no
 app-owned main, Gecko, or Gecko-child process. `git diff --check` passed and the
-tracked worktree was clean at exact application/test source `de7bdd7` before this
+tracked worktree was clean at exact application/test source `a07a64e` before this
 receipt-only update.
 
 ## Security, privacy, and limitations
@@ -165,6 +176,10 @@ receipt-only update.
   uninstall completion, reinspects installed state, and restores browsing only
   after confirming absence. Failure stays blank and popup-unavailable with explicit
   cleanup retry and the prior safe HTTP(S) destination preserved for external use.
+- A successful-null installed-extension result is an inspection failure, never
+  proof of absence. The only durable control value is the empty `.csfloat-trusted`
+  sentinel inside the app's no-backup per-profile directory; no recovery URL,
+  query, fragment, account evidence, cookie, or token is persisted by this flow.
 - The deterministic popup/cleanup failure controls exist only in debuggable builds;
   they exercise the production recovery paths and are absent from release builds.
 - State is not shared with another `(account, website)` runtime. The emulator test
