@@ -1,20 +1,20 @@
 # Issue #10 production CSFloat verification receipt
 
-Status: **Machine/emulator verification PASS at application/test source `d98eedb`**
+Status: **Machine/emulator verification PASS at exact HEAD `f172a32`**
 
 ## Exact candidate
 
-- Application/test source: `d98eedbe780e2af8fb4463b82c0c445c8fa68dde`
+- Application/test source: `f172a3257d1a6bd0c14f83f636977358064ac104`
 - Starting checkpoint: `31f9fadbf16dd3aa1defc4c4aff132def1f738f7`
 - Branch: `codex/geckoview-campaign`
 - Variant: debug
 - Preserved evidence directory:
-  `C:\Users\esmer\AppData\Local\Temp\sam-gv10-d98eedb`
+  `C:\Users\esmer\AppData\Local\Temp\sam-gv10-f172a32`
 - `app-debug.apk`: 599,057,529 bytes; SHA-256
-  `4B89A78862BE64AAEEAC0692117BA2D7F2B1A036E05482FDBCCB5939BB63BF5B`
-- `app-debug-androidTest.apk`: 2,300,722 bytes; SHA-256
-  `05353B4021878C049FA68904EEAD3A722DA5C27B22A1F72219A4B5403D3845CD`
-- Verification completed: 2026-09-07 13:07 CEST
+  `00102F71EBA30B6A61ECF4FC2C9459E21A9F33FAA8CF6B8CFA50BFB0715FDEFD`
+- `app-debug-androidTest.apk`: 2,304,146 bytes; SHA-256
+  `AAC0D9834116D7A1F2DE705862DCD592915E81F6F060315D0FF84DBADDAE7E91`
+- Verification completed: 2026-09-07 13:48 CEST
 
 ## Approved extension artifact
 
@@ -82,7 +82,14 @@ fire-and-forget cleanup. Commit `6b147c9` added a genuinely red truthful-popup
 contract; `6e9a1a5` removed the app-owned tracking assertion; `8331f10` made cleanup
 fail closed; and `d98eedb` removed stale tracking claims from proof names.
 
-The fresh unit/build/lint command at exact source `d98eedb` was:
+Independent testing then found that a failed post-denial inspection could restore
+browsing without proving that the extension was absent or disabled. Commits
+`3ac6f71` and `a6e4c99` added a public recovery journey and made that uncertainty
+fail closed: the embedded page is blanked, installation stays disabled, and retry
+re-inspects or removes the extension before restoring the preserved safe URL.
+Commit `f172a32` asserts that the disabled controls are visible to the user.
+
+The fresh unit/build/lint command at exact source `f172a32` was:
 
 ```powershell
 $env:ANDROID_HOME = 'C:\Users\esmer\AppData\Local\Android\Sdk'
@@ -90,7 +97,7 @@ $env:ANDROID_SERIAL = 'emulator-5580'
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug lintRelease --rerun-tasks --console=plain
 ```
 
-Exit 0 in 1 minute 2 seconds; all 103 tasks executed. All 67 unit tests passed with
+Exit 0 in 55 seconds; all 103 tasks executed. All 67 unit tests passed with
 zero failures, errors, or skips. Debug and Android-test APK assembly passed. Debug
 lint reported 123 warnings and zero errors; release lint reported 55 warnings and
 zero errors. The result XML files are under
@@ -106,12 +113,10 @@ $adb = 'C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
 ```
 
 The dedicated AVD initially rejected an incremental replacement because only about
-one GB was free. After verifying the exact package names, only the campaign-owned
-debug and test packages were uninstalled; both removals exited 0. The exact main
-APK then installed incrementally and the test APK installed by streaming, both with
-exit 0. The final `d98eedb` commit changes test names only: its rebuilt main APK was
-byte-identical to the already installed main APK, and its rebuilt test APK was
-streamed again successfully before the final run.
+919 MB was free. After verifying the exact package names, only the campaign-owned
+debug and test packages were uninstalled; both removals exited 0. The exact
+`f172a32` main APK then installed incrementally and the exact test APK installed by
+streaming, both with exit 0.
 
 The final full emulator command was:
 
@@ -119,19 +124,22 @@ The final full emulator command was:
 & $adb -s emulator-5580 shell am instrument -w -r com.steamaccountmanager.app.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-Exit 0; 32/32 tests passed in 309.605 seconds. The runner exercised the complete
+Exit 0; 33/33 tests passed in 339.831 seconds. The runner exercised the complete
 production CSFloat denial and acceptance paths; official-popup rendering;
 popup-failure/retry; cleanup-failure, immediate safe blanking, retry, and
-list-confirmed absence; A-enabled/B-absent/A-enabled isolation; ordinary browsing
-after denial; external recovery; production browser navigation; process lifecycle;
-persistence; detector boundaries; and all earlier prototype regressions.
+list-confirmed absence; denied-verification failure, safe blanking, disabled
+installation, retry, and confirmed recovery; A-enabled/B-absent/A-enabled
+isolation; ordinary browsing after denial; external recovery; production browser
+navigation; process lifecycle; persistence; detector boundaries; and all earlier
+prototype regressions.
 Accessibility assertions observed the real official popup label `Offer Tracking
 Enabled`. That label proves required permission in this artifact, not a live
 tracking update, and the app does not claim otherwise.
 
 After the run, the app and test packages were force-stopped and `pidof` returned no
 app-owned main, Gecko, or Gecko-child process. `git diff --check` passed and the
-tracked worktree was clean at the application/test source checkpoint.
+tracked worktree was clean at exact application/test source `f172a32` before this
+receipt-only update.
 
 ## Security, privacy, and limitations
 
