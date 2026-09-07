@@ -504,10 +504,22 @@ class ProductionGeckoSessionTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext
         val automation = instrumentation.uiAutomation
-        val marker = UUID.randomUUID().toString().replace("-", "")
-        val sessionA = SessionIdentifier("instrumentation-csfloat-revoke-a-$marker", "steam")
-        val sessionB = SessionIdentifier("instrumentation-csfloat-revoke-b-$marker", "steam")
+        val sessionA = SessionIdentifier("instrumentation-csfloat-issue11-restart-a", "steam")
+        val sessionB = SessionIdentifier("instrumentation-csfloat-issue11-restart-b", "steam")
         val steamListing = "https://steamcommunity.com/market/listings/730/AK-47"
+
+        if (InstrumentationRegistry.getArguments().getString("issue11RestartPhase") == "verify-after-force-stop") {
+            try {
+                stopBrowserWorker(context)
+                BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
+                waitForTextContaining(automation, "CSFloat: enabled (5.17.0, signed)")
+                BrowserProcessController.openWebsite(context, sessionB, steamListing, listOf("steamcommunity.com"))
+                waitForTextContaining(automation, "CSFloat: absent")
+            } finally {
+                stopBrowserWorker(context)
+            }
+            return@runBlocking
+        }
 
         try {
             stopBrowserWorker(context)
