@@ -47,6 +47,7 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
+import org.mozilla.geckoview.WebRequestError
 
 /** The production GeckoView surface for the built-in Steam browser journey. */
 @Composable
@@ -74,6 +75,7 @@ fun GeckoBrowserScreen(
     var canGoForward by remember { mutableStateOf(false) }
     var blockedUri by remember { mutableStateOf<Uri?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var failedUrl by remember { mutableStateOf<String?>(null) }
     var showConsent by remember { mutableStateOf(showDetectorConsent) }
     var consentPersistenceFailed by remember { mutableStateOf(false) }
 
@@ -203,12 +205,30 @@ fun GeckoBrowserScreen(
                                 },
                             )
                         }
+
+                        override fun onLoadError(
+                            session: GeckoSession,
+                            uri: String?,
+                            webRequestError: WebRequestError,
+                        ): GeckoResult<String>? {
+                            error = if (
+                                uri != null &&
+                                policy.decideNavigation(uri) == WebsitePolicy.NavigationDecision.REJECT
+                            ) {
+                                REJECTED_NAVIGATION_MESSAGE
+                            } else {
+                                failedUrl = uri
+                                "This website could not be reached."
+                            }
+                            return null
+                        }
                     }
                     session.progressDelegate = object : GeckoSession.ProgressDelegate {
                         override fun onPageStart(session: GeckoSession, url: String) {
                             loading = true
                             progress = 0f
                             error = null
+                            failedUrl = null
                         }
 
                         override fun onProgressChange(session: GeckoSession, value: Int) {
@@ -217,7 +237,7 @@ fun GeckoBrowserScreen(
 
                         override fun onPageStop(session: GeckoSession, success: Boolean) {
                             loading = false
-                            if (!success) error = "This website could not be reached."
+                            if (!success && error == null) error = "This website could not be reached."
                         }
                     }
                     session.contentDelegate = object : GeckoSession.ContentDelegate {
@@ -276,7 +296,11 @@ fun GeckoBrowserScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(message, modifier = Modifier.padding(20.dp))
-                        TextButton(onClick = { error = null; sessionRef?.reload() }) { Text("Try again") }
+                        TextButton(onClick = {
+                            val retryUrl = failedUrl
+                            error = null
+                            if (retryUrl != null) sessionRef?.loadUri(retryUrl) else sessionRef?.reload()
+                        }) { Text("Try again") }
                     }
                 }
             }
