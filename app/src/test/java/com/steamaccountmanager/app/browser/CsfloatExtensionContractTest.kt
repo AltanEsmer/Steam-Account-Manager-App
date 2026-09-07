@@ -61,15 +61,15 @@ Data collection (1):
     }
 
     @Test
-    fun artifactAndActionRejectEveryReviewedMetadataMismatch() {
+    fun artifactAndPopupRejectEveryReviewedMetadataMismatch() {
         assertTrue(CsfloatExtensionContract.artifactMatches(7_011_169, CsfloatExtensionContract.SHA256))
         assertFalse(CsfloatExtensionContract.artifactMatches(7_011_168, CsfloatExtensionContract.SHA256))
         assertFalse(CsfloatExtensionContract.artifactMatches(7_011_169, "00"))
-        assertTrue(CsfloatExtensionContract.canBindAction(CsfloatExtensionContract.ID, "5.17.0", 2, true))
-        assertFalse(CsfloatExtensionContract.canBindAction(CsfloatExtensionContract.ID, "5.17.0", 2, false))
-        assertFalse(CsfloatExtensionContract.canBindAction("other", "5.17.0", 2, true))
-        assertFalse(CsfloatExtensionContract.canBindAction(CsfloatExtensionContract.ID, "5.17.1", 2, true))
-        assertFalse(CsfloatExtensionContract.canBindAction(CsfloatExtensionContract.ID, "5.17.0", 0, true))
+        assertTrue(CsfloatExtensionContract.canOpenOfficialPopup(CsfloatExtensionContract.ID, "5.17.0", 2, true))
+        assertFalse(CsfloatExtensionContract.canOpenOfficialPopup(CsfloatExtensionContract.ID, "5.17.0", 2, false))
+        assertFalse(CsfloatExtensionContract.canOpenOfficialPopup("other", "5.17.0", 2, true))
+        assertFalse(CsfloatExtensionContract.canOpenOfficialPopup(CsfloatExtensionContract.ID, "5.17.1", 2, true))
+        assertFalse(CsfloatExtensionContract.canOpenOfficialPopup(CsfloatExtensionContract.ID, "5.17.0", 0, true))
     }
 
     @Test

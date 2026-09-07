@@ -325,6 +325,52 @@ class ProductionGeckoSessionTest {
     }
 
     @Test
+    fun productionCsfloatCleanupFailureBlanksThenRetriesToConfirmedAbsence() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val runMarker = UUID.randomUUID().toString().replace("-", "")
+        val sessionId = SessionIdentifier("instrumentation-csfloat-cleanup-$runMarker", "steam")
+        val server = LoopbackFixture(runMarker)
+        val pageMarker = marker("CSFLOAT-CLEANUP", "CSFLOAT-CLEANUP", "CSFLOAT-CLEANUP", "CSFLOAT-CLEANUP")
+
+        try {
+            stopBrowserWorker(context)
+            clearSyntheticDetectorConsent(context, sessionId)
+            server.start()
+            open(context, sessionId, server.url("CSFLOAT-CLEANUP"))
+            waitForText(automation, "Allow Steam profile detection?")
+            clickText(automation, "Allow and continue")
+            waitForText(automation, pageMarker)
+            waitForTextContaining(automation, "CSFloat: absent")
+            clickText(automation, "Install CSFloat")
+            waitForText(automation, "Install-time CSFloat access request")
+            clickText(automation, "Accept CSFloat access")
+            waitForTextContaining(automation, "CSFloat popup: available")
+
+            clickText(automation, "Test CSFloat cleanup failure")
+            waitForTextContaining(
+                automation,
+                "CSFloat: cleanup incomplete; access was closed. Retry cleanup before browsing.",
+            )
+            waitForTextContaining(automation, "CSFloat popup: failed. Retry is available.")
+            waitForTextToDisappear(automation, pageMarker)
+            waitForText(automation, "Open externally")
+
+            clickText(automation, "Retry CSFloat")
+            waitForTextContaining(
+                automation,
+                "CSFloat: test cleanup complete; extension absent; browsing restored.",
+            )
+            waitForText(automation, pageMarker)
+            waitForTextContaining(automation, "CSFloat popup: unavailable")
+        } finally {
+            stopBrowserWorker(context)
+            server.close()
+        }
+    }
+
+    @Test
     fun productionCsfloatAcceptsOpensTracksAndRemainsIsolatedByBrowserSession() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext

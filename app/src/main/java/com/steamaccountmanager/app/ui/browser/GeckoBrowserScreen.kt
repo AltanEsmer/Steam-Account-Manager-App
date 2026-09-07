@@ -98,10 +98,13 @@ fun GeckoBrowserScreen(
     var popupSession by remember { mutableStateOf<GeckoSession?>(null) }
     var tempXpi by remember { mutableStateOf<File?>(null) }
     var failNextPopupForTest by remember { mutableStateOf(false) }
+    var failNextCleanupForTest by remember { mutableStateOf(false) }
     var pendingCleanup by remember { mutableStateOf<List<WebExtension>>(emptyList()) }
     var pendingCleanupSuccess by remember { mutableStateOf("") }
     var runtimeRef: GeckoRuntime? = null
     var currentUrl by remember { mutableStateOf(startUrl) }
+    var safeRecoveryUrl by remember { mutableStateOf(startUrl) }
+    var cleanupBlanking by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf(websiteId) }
     var progress by remember { mutableFloatStateOf(0f) }
     var loading by remember { mutableStateOf(true) }
@@ -196,7 +199,7 @@ fun GeckoBrowserScreen(
 
     fun bindCsfloat(extension: WebExtension) {
         clearCsfloat()
-        if (!CsfloatExtensionContract.canBindAction(
+        if (!CsfloatExtensionContract.canOpenOfficialPopup(
                 extension.id,
                 extension.metaData.version,
                 extension.metaData.signedState,
@@ -216,6 +219,8 @@ fun GeckoBrowserScreen(
 
     fun cleanupCsfloat(targets: List<WebExtension>, successMessage: String) {
         clearCsfloat()
+        cleanupBlanking = true
+        sessionRef?.loadUri("about:blank")
         pendingCleanup = targets
         pendingCleanupSuccess = successMessage
         val controller = requireNotNull(runtimeRef).webExtensionController
@@ -223,7 +228,6 @@ fun GeckoBrowserScreen(
 
         fun cleanupFailed() {
             clearCsfloat()
-            sessionRef?.loadUri("about:blank")
             popupStatus.discoveryFailed()
             renderPopupStatus()
             csfloatState =
@@ -239,6 +243,7 @@ fun GeckoBrowserScreen(
                         pendingCleanup = emptyList()
                         pendingCleanupSuccess = ""
                         csfloatState = successMessage
+                        sessionRef?.loadUri(safeRecoveryUrl)
                     }
                 },
                 { cleanupFailed() },
@@ -256,7 +261,12 @@ fun GeckoBrowserScreen(
             }
         }
 
-        uninstallAt(0)
+        if (debugBuild && failNextCleanupForTest) {
+            failNextCleanupForTest = false
+            cleanupFailed()
+        } else {
+            uninstallAt(0)
+        }
     }
 
     fun discoverCsfloat() {
@@ -345,7 +355,7 @@ fun GeckoBrowserScreen(
                             )
                         ) {
                             sessionRef?.reload()
-                            csfloatState = "CSFloat: installed; discovering enabled action…"
+                            csfloatState = "CSFloat: installed; discovering official popup…"
                             discoverCsfloat()
                         } else {
                             if (extension == null) {
@@ -478,7 +488,7 @@ fun GeckoBrowserScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, "Forward")
                     }
                     IconButton(onClick = { sessionRef?.reload() }) { Icon(Icons.Filled.Refresh, "Refresh") }
-                    IconButton(onClick = { openExternal(Uri.parse(currentUrl)) }) {
+                    IconButton(onClick = { openExternal(Uri.parse(safeRecoveryUrl)) }) {
                         Icon(Icons.Filled.OpenInBrowser, "Open externally")
                     }
                 }
@@ -524,6 +534,16 @@ fun GeckoBrowserScreen(
                     if (debugBuild && popupState == CsfloatPopupState.AVAILABLE) {
                         TextButton(onClick = { failNextPopupForTest = true }) {
                             Text("Test CSFloat popup failure")
+                        }
+                        TextButton(onClick = {
+                            val extension = csfloatExtensionRef ?: return@TextButton
+                            failNextCleanupForTest = true
+                            cleanupCsfloat(
+                                listOf(extension),
+                                "CSFloat: test cleanup complete; extension absent; browsing restored.",
+                            )
+                        }) {
+                            Text("Test CSFloat cleanup failure")
                         }
                     }
                     if (popupState == CsfloatPopupState.FAILED) {
@@ -580,13 +600,24 @@ fun GeckoBrowserScreen(
                             perms: List<GeckoSession.PermissionDelegate.ContentPermission>,
                             hasUserGesture: Boolean,
                         ) {
-                            url?.let { currentUrl = it }
+                            url?.let {
+                                currentUrl = it
+                                if (it == "about:blank" && cleanupBlanking) {
+                                    cleanupBlanking = false
+                                } else if (policy.decideNavigation(it) == WebsitePolicy.NavigationDecision.ALLOW_IN_APP) {
+                                    val scheme = Uri.parse(it).scheme
+                                    if (scheme == "http" || scheme == "https") safeRecoveryUrl = it
+                                }
+                            }
                         }
 
                         override fun onLoadRequest(
                             session: GeckoSession,
                             request: GeckoSession.NavigationDelegate.LoadRequest,
                         ): GeckoResult<AllowOrDeny> {
+                            if (cleanupBlanking && request.uri == "about:blank") {
+                                return GeckoResult.fromValue(AllowOrDeny.ALLOW)
+                            }
                             val decision = policy.decideNavigation(request.uri)
                             if (decision == WebsitePolicy.NavigationDecision.OFFER_EXTERNAL) {
                                 blockedUri = Uri.parse(request.uri)

@@ -23,7 +23,7 @@ object CsfloatExtensionContract {
     fun artifactMatches(size: Long, sha256: String): Boolean =
         size == SIZE_BYTES && sha256 == SHA256
 
-    fun canBindAction(id: String?, version: String?, signedState: Int, enabled: Boolean): Boolean =
+    fun canOpenOfficialPopup(id: String?, version: String?, signedState: Int, enabled: Boolean): Boolean =
         enabled && isExpected(id, version, signedState)
 
     fun officialPopupUri(baseUrl: String?): String? = try {
