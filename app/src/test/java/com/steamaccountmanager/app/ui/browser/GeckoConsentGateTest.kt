@@ -1,12 +1,19 @@
 package com.steamaccountmanager.app.ui.browser
 
 import com.steamaccountmanager.app.persistDetectorConsentFailClosed
+import com.steamaccountmanager.app.tryPersistCsfloatQuarantine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GeckoConsentGateTest {
+
+    @Test
+    fun failedOrThrowingQuarantinePersistenceStaysClosed() {
+        assertFalse(tryPersistCsfloatQuarantine { false })
+        assertFalse(tryPersistCsfloatQuarantine { throw IllegalStateException("synthetic failure") })
+    }
 
     @Test
     fun failedPersistenceKeepsConsentGateClosed() {
