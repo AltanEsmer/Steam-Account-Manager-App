@@ -866,6 +866,15 @@ user checklist shortcut. Phone observations cannot replace live emulator proof.
 
 # Issue #8 production Steam-login smoke test
 
+## Accepted result
+
+The exact `f203175c45c14ec764d0f43c4550dbbe137c95ec` APK and SHA-256 below passed an
+approximately 15-minute run on a Samsung Galaxy S25 Ultra running Android 16. A/B
+isolation, close/reopen persistence, phone-restart persistence, and public
+avatar/profile detection passed, with no unexpected reauthentication. The report was
+complete and contained no sensitive evidence. Issue #9 may proceed. The procedure is
+retained below as the gate record.
+
 ## What changed
 
 Selecting Steam for an account now opens the app's production GeckoView session.
@@ -1049,7 +1058,8 @@ Do not share passwords, Steam Guard codes, QR login screens, cookies, tokens, ac
   provider, popup, or future Steam page change.
 - The debug APK is not a signed release artifact and does not prove release signing,
   Play distribution, download size, battery use, or long-term performance.
-- Issue #9 remains blocked until this exact-build result is reported PASS and accepted.
+- This result covers one exact Samsung/Android/build combination; issue #9 has its
+  own machine and emulator acceptance requirements.
 
 # Issue #12 final supported-device acceptance
 

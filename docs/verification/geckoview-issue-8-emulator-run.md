@@ -1,6 +1,6 @@
 # Issue #8 production GeckoView verification receipt
 
-Status: **Machine/emulator verification PASS at application/test source `f203175`; current-head independent tester/reviewer and focused physical-device Steam smoke test pending**
+Status: **Machine/emulator verification and focused physical-device Steam smoke test PASS for application/test source `f203175`**
 
 ## Exact candidate
 
@@ -20,6 +20,16 @@ Status: **Machine/emulator verification PASS at application/test source `f203175
 The APK is tied to the application/test source commit above. A following
 documentation-only checkpoint does not change the APK or its source. The phone gate
 must use this exact APK; the issue #7 prototype APK is not interchangeable.
+
+## Physical-device result
+
+The exact APK checksum above was confirmed before a successful approximately
+15-minute run on a Samsung Galaxy S25 Ultra running Android 16. A/B isolation,
+close/reopen persistence, full-phone-restart persistence, and public avatar/profile
+detection all passed. No unexpected reauthentication occurred. The supplied result
+contained no account names, credentials, authentication material, browser storage,
+trades, payment data, or screenshots. Independent medium-tester and fresh xhigh
+reviewer checks accepted the report as complete, consistent, and non-sensitive.
 
 ## What changed
 
@@ -242,5 +252,5 @@ build. Issue #8's gate artifact is the exact debug APK above.
 
 The physical-device procedure is in
 [Dagkan's campaign guide](../manual-testing/geckoview-campaign-dagkan.md#issue-8-production-steam-login-smoke-test).
-Issue #9 remains blocked until that exact-build smoke test is reported PASS and its
-sanitized evidence is accepted.
+The exact-build smoke test is PASS and its sanitized evidence is accepted, so issue
+#9 may proceed.
