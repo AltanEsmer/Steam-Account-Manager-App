@@ -439,16 +439,16 @@ fun GeckoBrowserScreen(
             controller.disable(target, WebExtensionController.EnableSource.APP)
         }
 
-        fun inspect(allowDelayedRetry: Boolean) {
+        fun inspect(remainingStaleInspections: Int) {
             controller.list().accept(
                 success@{ extensions ->
                     if (generation != mutationGeneration) return@success
                     val exact = extensions?.singleOrNull {
                         CsfloatExtensionContract.isExpected(it.id, it.metaData.version, it.metaData.signedState)
                     }
-                    if (exact != null && exact.metaData.enabled != enable && allowDelayedRetry) {
+                    if (exact != null && exact.metaData.enabled != enable && remainingStaleInspections > 0) {
                         Handler(Looper.getMainLooper()).postDelayed(
-                            { if (generation == mutationGeneration) inspect(false) },
+                            { if (generation == mutationGeneration) inspect(remainingStaleInspections - 1) },
                             500,
                         )
                         return@success
@@ -476,7 +476,7 @@ fun GeckoBrowserScreen(
         operation.accept(
             {
                 if (generation != mutationGeneration) return@accept
-                inspect(true)
+                inspect(50)
             },
             { failed() },
         )
