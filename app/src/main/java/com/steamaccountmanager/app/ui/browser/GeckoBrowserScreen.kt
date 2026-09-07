@@ -366,10 +366,11 @@ fun GeckoBrowserScreen(
     }
 
     fun verifyDeniedCsfloat() {
+        quarantine()
+
         fun verificationFailed() {
             clearCsfloat()
             pendingDeniedVerification = true
-            quarantine()
             popupStatus.discoveryFailed()
             renderPopupStatus()
             csfloatState =
@@ -583,7 +584,7 @@ fun GeckoBrowserScreen(
                     TextButton(
                         onClick = { installCsfloat() },
                         enabled = !csfloatBusy && csfloatExtensionRef == null &&
-                            !pendingDeniedVerification && pendingCleanup.isEmpty(),
+                            !csfloatQuarantined && !pendingDeniedVerification && pendingCleanup.isEmpty(),
                     ) {
                         Text(if (csfloatBusy) "Installing" else "Install CSFloat")
                     }

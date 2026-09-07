@@ -86,7 +86,11 @@ class BrowserActivity : ComponentActivity() {
         val quarantineKey = csfloatQuarantineKey(profileId)
         val recoveryKey = csfloatRecoveryKey(profileId)
         val initialQuarantine = quarantinePreferences.getBoolean(quarantineKey, false)
-        val quarantineRecoveryUrl = quarantinePreferences.getString(recoveryKey, startUrl) ?: startUrl
+        val quarantineRecoveryUrl = if (initialQuarantine) {
+            quarantinePreferences.getString(recoveryKey, startUrl) ?: startUrl
+        } else {
+            startUrl
+        }
 
         super.onCreate(savedInstanceState)
         setContent {
