@@ -2,7 +2,8 @@
 
 ## Build and environment
 
-- Source checkpoint: `9f02d320520f8b78b641fa9a2b5216ac877bf866`
+- Source/test checkpoint: `3982a95a1ee06fd4ddf4f798bb922dd34ab7e63e`
+- Production implementation checkpoint: `9f02d320520f8b78b641fa9a2b5216ac877bf866`
 - Starting checkpoint: `1a112ab71cd0ff41caad7164a65d1acb9949f20c`
 - Variant: `debug`
 - Emulator: `emulator-5580`, Android 16 / API 36, `sdk_gphone64_x86_64`
@@ -11,8 +12,8 @@
   `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}`, observed signed state `2`
 - App APK: 599,568,666 bytes, SHA-256
   `A01695F3752A5CB8355DA58D0EC40C12F65821C31A9D96F8BDE3E0EA078D20ED`
-- Test APK: 2,410,371 bytes, SHA-256
-  `9687397BC09E51A03B83B69AB3B4570AA59FA9319591B1167AC5058DE9B077A9`
+- Test APK: 2,411,747 bytes, SHA-256
+  `33B23FB47096FB2ACCBE117B0731812FF180C15462A6F6D26B756B330B078092`
 
 Every device command used `adb -s emulator-5580`. Installation initially lacked
 temporary space, so only the prior scoped app and test packages were removed before
@@ -47,6 +48,14 @@ OK (1 test), 82.363s
 
 post-repair five focused production CSFloat methods
 OK (5 tests), 115.656s
+
+clean-install fixed-profile default phase
+OK (1 test), 36.953s
+
+adb -s emulator-5580 shell am force-stop com.steamaccountmanager.app.debug
+
+same method with -e issue11RestartPhase verify-after-force-stop
+OK (1 test), 8.073s
 ```
 
 The five-test run covered install denial and acceptance, callback-derived required
@@ -89,10 +98,11 @@ After choosing the system dialog's Wait action, all required post-repair runs pa
   and route reopen are public production-shell checks. The existing production
   session lifecycle test separately covers repeated close/reopen, profile switching,
   prior-generation death, explicit worker stop/reopen, and latest-request routing.
-- A separate force-stop of the instrumentation-host app process cannot resume the
-  same test, so activity recreation and a literal whole-app force-stop were not
-  independently automated in this scoped run. Persistent profile restoration was
-  observed across browser-process death and production route reopen.
+- The fixed-profile default phase ended with A exact enabled and B absent, then
+  stopped the browser while preserving both Gecko profiles. After an external
+  whole-app force-stop, the same test method's verification phase ran in a fresh
+  target process, opened A and observed exact enabled state, switched to B and
+  observed absent state, then stopped the browser. No app-owned process remained.
 
 No credentials, cookies, tokens, trade contents, account identity, screenshots, or
 URLs containing sensitive state were recorded.
