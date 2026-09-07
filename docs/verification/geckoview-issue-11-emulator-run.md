@@ -2,8 +2,8 @@
 
 ## Build and environment
 
-- Source/test checkpoint: `4424bfb81c1fcc21e830ced24535256e9caa1514`
-- Production implementation checkpoint: `4424bfb81c1fcc21e830ced24535256e9caa1514`
+- Source/test checkpoint: `01e41faadd51619ff8a5506df4f6c3c129c26815`
+- Production implementation checkpoint: `01e41faadd51619ff8a5506df4f6c3c129c26815`
 - Starting checkpoint: `1a112ab71cd0ff41caad7164a65d1acb9949f20c`
 - Verification timestamp: `2026-09-07T19:03:27+02:00`
 - Host: Windows 11 Pro `10.0.26200`, build 26200
@@ -14,10 +14,10 @@
 - GeckoView: `153.0.20260810162159`
 - CSFloat: official signed 5.17.0, ID
   `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}`, observed signed state `2`
-- App APK: 599,090,297 bytes, SHA-256
-  `49C571753E841125C2D88834613E3103E7071B2FAE2F3BDFC521BA3299896CE4`
-- Test APK: 2,313,942 bytes, SHA-256
-  `74D5B7890FE5582D8B381FAF4AB459D03BFFB01877EF20AF256554B7E1E4EEFF`
+- App APK: 599,601,742 bytes, SHA-256
+  `BB78F6B0927008D2D292EA99CF092C44F138863CF416495A031C1E815F2DA2F2`
+- Test APK: 2,421,623 bytes, SHA-256
+  `B54ECB1A96FEDBCFE0CCA77526DF99B58C21B9C3F514FC3C093C24178F0C1A7C`
 
 Every device command used `adb -s emulator-5580`. Installation initially lacked
 temporary space, so only the prior scoped app and test packages were removed before
@@ -90,6 +90,12 @@ adb -s emulator-5580 shell am force-stop com.steamaccountmanager.app.debug
 
 same method with -e issue11RestartPhase verify-after-force-stop
 OK (1 test), 12.203s
+
+durable restoration fence, clean exact install, lifecycle run 1
+OK (1 test), 51.904s
+
+durable restoration fence, second clean exact install, lifecycle run 2
+OK (1 test), 51.074s
 ```
 
 The five-test run covered install denial and acceptance, callback-derived required
@@ -138,10 +144,15 @@ After choosing the system dialog's Wait action, all required post-repair runs pa
 - Disable and enable durably quarantine and blank browsing before mutation, await the
   Gecko callback, then require a non-null list with the exact reviewed ID, version,
   signed state, and requested enabled flag before restoring browsing.
+- Enable and reinstall persist a profile-local pending-restoration marker before
+  mutation. A replacement screen stays quarantined while exact metadata is stale or
+  absent; only a fresh exact enabled re-list clears pending state and quarantine. The
+  public lifecycle test closes/reopens immediately after Enable and accepted reinstall.
 - Uninstall reuses the hardened cleanup path and restores only after list-confirmed
   absence. Reinstall reuses the verified installer and Gecko prompt delegate.
 - The debug update trigger calls the production prompt delegate's actual
-  `onUpdatePrompt`; it remains denied and the reviewed version stays pinned.
+  `onUpdatePrompt`, awaits `DENY`, and re-lists the exact signed enabled package before
+  reporting unchanged state.
 - Screen close/reopen, A/B process switching, explicit browser-process recreation,
   and route reopen are public production-shell checks. The existing production
   session lifecycle test separately covers repeated close/reopen, profile switching,
