@@ -1,20 +1,20 @@
 # Issue #10 production CSFloat verification receipt
 
-Status: **Machine/emulator verification PASS at exact HEAD `f172a32`**
+Status: **Machine/emulator verification PASS at application/test source `de7bdd7`**
 
 ## Exact candidate
 
-- Application/test source: `f172a3257d1a6bd0c14f83f636977358064ac104`
+- Application/test source: `de7bdd7186bd6c758dcc7563deae83b8c58470c3`
 - Starting checkpoint: `31f9fadbf16dd3aa1defc4c4aff132def1f738f7`
 - Branch: `codex/geckoview-campaign`
 - Variant: debug
 - Preserved evidence directory:
-  `C:\Users\esmer\AppData\Local\Temp\sam-gv10-f172a32`
-- `app-debug.apk`: 599,057,529 bytes; SHA-256
-  `00102F71EBA30B6A61ECF4FC2C9459E21A9F33FAA8CF6B8CFA50BFB0715FDEFD`
-- `app-debug-androidTest.apk`: 2,304,146 bytes; SHA-256
-  `AAC0D9834116D7A1F2DE705862DCD592915E81F6F060315D0FF84DBADDAE7E91`
-- Verification completed: 2026-09-07 13:48 CEST
+  `C:\Users\esmer\AppData\Local\Temp\sam-gv10-de7bdd7`
+- `app-debug.apk`: 599,073,913 bytes; SHA-256
+  `7325D4C4E0CCEE38269EDA24A4EA71808D082E55E8FCF47C51E250D2A388B1F9`
+- `app-debug-androidTest.apk`: 2,304,982 bytes; SHA-256
+  `0297505C9AED14E4EF9C9A8CF4C3F8B36032B18B185881E0F13EC1B821AD3C23`
+- Verification completed: 2026-09-07 14:50 CEST
 
 ## Approved extension artifact
 
@@ -89,7 +89,16 @@ fail closed: the embedded page is blanked, installation stays disabled, and retr
 re-inspects or removes the extension before restoring the preserved safe URL.
 Commit `f172a32` asserts that the disabled controls are visible to the user.
 
-The fresh unit/build/lint command at exact source `f172a32` was:
+Fresh xhigh review then found that blanking was not a complete quarantine: browser
+navigation controls remained usable, the uncertain state was lost on restart, and
+the detector could race startup inspection and load Steam too early. Commits
+`be97c11` through `de7bdd7` add public navigation/lifecycle coverage and one durable
+per-profile quarantine. Denial and cleanup enter it before asynchronous inspection;
+Back, Forward, Refresh, installation, and all non-blank in-app loads are blocked;
+startup waits for both detector readiness and extension trust inspection; and only
+confirmed absence/disablement clears the marker and restores the preserved safe URL.
+
+The fresh unit/build/lint command at exact source `de7bdd7` was:
 
 ```powershell
 $env:ANDROID_HOME = 'C:\Users\esmer\AppData\Local\Android\Sdk'
@@ -112,11 +121,10 @@ $adb = 'C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
 & $adb -s emulator-5580 install -r -t app\build\outputs\apk\androidTest\debug\app-debug-androidTest.apk
 ```
 
-The dedicated AVD initially rejected an incremental replacement because only about
-919 MB was free. After verifying the exact package names, only the campaign-owned
-debug and test packages were uninstalled; both removals exited 0. The exact
-`f172a32` main APK then installed incrementally and the exact test APK installed by
-streaming, both with exit 0.
+The dedicated AVD remained storage-constrained. After verifying the exact package
+names, only the campaign-owned debug and test packages were uninstalled; both
+removals exited 0. The exact `de7bdd7` main APK then installed incrementally and the
+exact test APK installed by streaming, both with exit 0.
 
 The final full emulator command was:
 
@@ -124,21 +132,22 @@ The final full emulator command was:
 & $adb -s emulator-5580 shell am instrument -w -r com.steamaccountmanager.app.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-Exit 0; 33/33 tests passed in 339.831 seconds. The runner exercised the complete
+Exit 0; 33/33 tests passed in 375.784 seconds. The runner exercised the complete
 production CSFloat denial and acceptance paths; official-popup rendering;
 popup-failure/retry; cleanup-failure, immediate safe blanking, retry, and
 list-confirmed absence; denied-verification failure, safe blanking, disabled
-installation, retry, and confirmed recovery; A-enabled/B-absent/A-enabled
-isolation; ordinary browsing after denial; external recovery; production browser
-navigation; process lifecycle; persistence; detector boundaries; and all earlier
-prototype regressions.
+installation, retry, and confirmed recovery; quarantine-disabled navigation;
+close/reopen and process-restart quarantine persistence; startup inspection before
+Steam loading; A-enabled/B-absent/A-enabled isolation; ordinary browsing after
+denial; external recovery; production browser navigation; process lifecycle;
+persistence; detector boundaries; and all earlier prototype regressions.
 Accessibility assertions observed the real official popup label `Offer Tracking
 Enabled`. That label proves required permission in this artifact, not a live
 tracking update, and the app does not claim otherwise.
 
 After the run, the app and test packages were force-stopped and `pidof` returned no
 app-owned main, Gecko, or Gecko-child process. `git diff --check` passed and the
-tracked worktree was clean at exact application/test source `f172a32` before this
+tracked worktree was clean at exact application/test source `de7bdd7` before this
 receipt-only update.
 
 ## Security, privacy, and limitations
