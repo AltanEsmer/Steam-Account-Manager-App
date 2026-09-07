@@ -77,6 +77,8 @@ fun GeckoBrowserScreen(
     var sessionRef by remember { mutableStateOf<GeckoSession?>(null) }
     var detectorExtensionRef by remember { mutableStateOf<WebExtension?>(null) }
     var csfloatExtensionRef by remember { mutableStateOf<WebExtension?>(null) }
+    var csfloatDefaultAction by remember { mutableStateOf<WebExtension.Action?>(null) }
+    var csfloatSessionAction by remember { mutableStateOf<WebExtension.Action?>(null) }
     var csfloatAction by remember { mutableStateOf<WebExtension.Action?>(null) }
     var csfloatState by remember { mutableStateOf("CSFloat: checking installed state…") }
     var csfloatBusy by remember { mutableStateOf(false) }
@@ -136,6 +138,8 @@ fun GeckoBrowserScreen(
             sessionRef?.webExtensionController?.setActionDelegate(extension, null)
         }
         csfloatExtensionRef = null
+        csfloatDefaultAction = null
+        csfloatSessionAction = null
         csfloatAction = null
         tracking.unavailable()
         renderTracking()
@@ -154,6 +158,7 @@ fun GeckoBrowserScreen(
         popupSession = popup
         popupView = view
         popupDialog = dialog
+        csfloatState = "CSFloat: official popup opened"
         tracking.popupOpened(request)
         renderTracking()
         GeckoResult.fromValue(popup)
@@ -166,11 +171,21 @@ fun GeckoBrowserScreen(
     val actionDelegate = remember {
         object : WebExtension.ActionDelegate {
             override fun onBrowserAction(extension: WebExtension, callbackSession: GeckoSession?, action: WebExtension.Action) {
-                if (extension === csfloatExtensionRef && action.enabled == true) {
-                    csfloatAction = action
-                    tracking.actionAvailable()
-                    renderTracking()
-                }
+                if (extension !== csfloatExtensionRef ||
+                    !CsfloatExtensionContract.canBindAction(
+                        extension.id,
+                        extension.metaData.version,
+                        extension.metaData.signedState,
+                        extension.metaData.enabled,
+                    ) ||
+                    (callbackSession != null && callbackSession !== sessionRef)
+                ) return
+                if (callbackSession == null) csfloatDefaultAction = action else csfloatSessionAction = action
+                val default = csfloatDefaultAction
+                val session = csfloatSessionAction
+                csfloatAction = if (default != null && session != null) session.withDefault(default) else default
+                if (csfloatAction?.enabled == true) tracking.actionAvailable() else tracking.unavailable()
+                renderTracking()
             }
 
             override fun onPageAction(extension: WebExtension, callbackSession: GeckoSession?, action: WebExtension.Action) =
@@ -399,6 +414,7 @@ fun GeckoBrowserScreen(
                     TextButton(
                         onClick = {
                             val action = csfloatAction ?: return@TextButton
+                            csfloatState = "CSFloat: official action dispatched"
                             tracking.request {
                                 try {
                                     action.click()

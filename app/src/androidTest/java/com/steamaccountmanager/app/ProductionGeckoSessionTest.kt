@@ -446,7 +446,9 @@ class ProductionGeckoSessionTest {
 
     private fun waitForTextContaining(automation: android.app.UiAutomation, expected: String) {
         assertTrue("Timed out waiting for accessibility text containing: $expected", waitUntil(UI_TIMEOUT_MS) {
-            hasTextContaining(automation.rootInActiveWindow, expected)
+            hasTextContaining(automation.rootInActiveWindow, expected) || automation.windows.any {
+                hasTextContaining(it.root, expected)
+            }
         })
     }
 
