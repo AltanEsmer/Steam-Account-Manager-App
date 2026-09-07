@@ -405,6 +405,7 @@ class ProductionGeckoSessionTest {
             assertControlEnabled(automation, "Back", false)
             assertControlEnabled(automation, "Forward", false)
             assertControlEnabled(automation, "Refresh", false)
+            assertControlEnabled(automation, "Install CSFloat", false)
 
             clickText(automation, "Close")
             stopBrowserWorker(context)
