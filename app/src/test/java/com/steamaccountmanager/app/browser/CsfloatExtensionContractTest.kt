@@ -100,35 +100,29 @@ Data collection (1):
     }
 
     @Test
-    fun trackingRequiresCurrentPopupAndVisibleOfficialStatus() {
-        val tracking = CsfloatTracking()
-        tracking.actionAvailable()
-        assertEquals(CsfloatTrackingState.READY, tracking.state)
-        tracking.recordVisibleStatus()
-        assertEquals(CsfloatTrackingState.READY, tracking.state)
-
-        val request = tracking.request {}
-        assertFalse(tracking.popupOpened(request?.plus(1)))
-        assertEquals(request, tracking.pendingRequest)
-        assertTrue(tracking.popupOpened(request))
-        assertEquals(CsfloatTrackingState.READY, tracking.state)
-        tracking.recordVisibleStatus()
-        assertEquals(CsfloatTrackingState.ACTIVE, tracking.state)
+    fun popupRequiresCurrentRequestBeforeReportingOpened() {
+        val popup = CsfloatPopupStatus()
+        popup.available()
+        val request = popup.requestOpen {}
+        assertFalse(popup.opened(request?.plus(1)))
+        assertEquals(request, popup.pendingRequest)
+        assertTrue(popup.opened(request))
+        assertEquals(CsfloatPopupState.OPENED, popup.state)
     }
 
     @Test
     fun trackingFailureRecoversWithoutAcceptingStaleCallbacks() {
-        val tracking = CsfloatTracking()
-        tracking.actionAvailable()
-        val failedRequest = tracking.request {}
-        assertTrue(tracking.failed(failedRequest))
-        assertEquals(CsfloatTrackingState.FAILED, tracking.state)
-        assertFalse(tracking.popupOpened(failedRequest))
-        tracking.recover()
-        assertEquals(CsfloatTrackingState.UNAVAILABLE, tracking.state)
-        tracking.actionAvailable()
-        val current = tracking.request {}
-        assertFalse(tracking.popupOpened(failedRequest))
-        assertTrue(tracking.popupOpened(current))
+        val popup = CsfloatPopupStatus()
+        popup.available()
+        val failedRequest = popup.requestOpen {}
+        assertTrue(popup.failed(failedRequest))
+        assertEquals(CsfloatPopupState.FAILED, popup.state)
+        assertFalse(popup.opened(failedRequest))
+        popup.recover()
+        assertEquals(CsfloatPopupState.UNAVAILABLE, popup.state)
+        popup.available()
+        val current = popup.requestOpen {}
+        assertFalse(popup.opened(failedRequest))
+        assertTrue(popup.opened(current))
     }
 }

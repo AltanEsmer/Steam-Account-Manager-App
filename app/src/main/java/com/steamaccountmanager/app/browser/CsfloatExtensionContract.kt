@@ -86,7 +86,7 @@ object CsfloatExtensionContract {
     }
 }
 
-enum class CsfloatTrackingState { UNAVAILABLE, READY, ACTIVE, FAILED }
+enum class CsfloatPopupState { UNAVAILABLE, AVAILABLE, OPENED, FAILED }
 
 enum class CsfloatDenialState { ABSENT, DISABLED, ENABLED, QUERY_FAILED }
 
@@ -101,8 +101,8 @@ fun csfloatDenialMessage(state: CsfloatDenialState): String = when (state) {
         "CSFloat: consent denied but extension state could not be verified. Close or retry."
 }
 
-class CsfloatTracking {
-    var state = CsfloatTrackingState.UNAVAILABLE
+class CsfloatPopupStatus {
+    var state = CsfloatPopupState.UNAVAILABLE
         private set
     var pendingRequest: Long? = null
         private set
@@ -111,24 +111,25 @@ class CsfloatTracking {
     private var nextRequest = 1L
 
     fun unavailable() {
-        state = CsfloatTrackingState.UNAVAILABLE
+        state = CsfloatPopupState.UNAVAILABLE
         pendingRequest = null
         officialSurfaceOpened = false
     }
 
-    fun actionAvailable() {
-        if (state == CsfloatTrackingState.UNAVAILABLE) state = CsfloatTrackingState.READY
+    fun available() {
+        if (state == CsfloatPopupState.UNAVAILABLE) state = CsfloatPopupState.AVAILABLE
     }
 
-    fun request(click: () -> Unit): Long? {
-        if (state !in setOf(CsfloatTrackingState.READY, CsfloatTrackingState.ACTIVE) || pendingRequest != null) return null
-        return nextRequest++.also { pendingRequest = it; click() }
+    fun requestOpen(open: () -> Unit): Long? {
+        if (state !in setOf(CsfloatPopupState.AVAILABLE, CsfloatPopupState.OPENED) || pendingRequest != null) return null
+        return nextRequest++.also { pendingRequest = it; open() }
     }
 
-    fun popupOpened(request: Long?): Boolean {
+    fun opened(request: Long?): Boolean {
         if (request == null || request != pendingRequest) return false
         pendingRequest = null
         officialSurfaceOpened = true
+        state = CsfloatPopupState.OPENED
         return true
     }
 
@@ -136,21 +137,15 @@ class CsfloatTracking {
         if (request == null || request != pendingRequest) return false
         pendingRequest = null
         officialSurfaceOpened = false
-        state = CsfloatTrackingState.FAILED
+        state = CsfloatPopupState.FAILED
         return true
     }
 
     fun discoveryFailed() {
         pendingRequest = null
         officialSurfaceOpened = false
-        state = CsfloatTrackingState.FAILED
+        state = CsfloatPopupState.FAILED
     }
 
     fun recover() = unavailable()
-
-    fun recordVisibleStatus() {
-        if (state == CsfloatTrackingState.READY && pendingRequest == null && officialSurfaceOpened) {
-            state = CsfloatTrackingState.ACTIVE
-        }
-    }
 }

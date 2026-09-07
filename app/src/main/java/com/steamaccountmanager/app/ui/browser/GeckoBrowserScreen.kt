@@ -5,6 +5,7 @@ import android.app.Dialog
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.content.pm.ApplicationInfo
 import android.view.ViewGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -44,8 +45,8 @@ import com.steamaccountmanager.app.browser.SteamLoginDetector
 import com.steamaccountmanager.app.browser.WebsitePolicy
 import com.steamaccountmanager.app.browser.CsfloatExtensionContract
 import com.steamaccountmanager.app.browser.CsfloatDenialState
-import com.steamaccountmanager.app.browser.CsfloatTracking
-import com.steamaccountmanager.app.browser.CsfloatTrackingState
+import com.steamaccountmanager.app.browser.CsfloatPopupState
+import com.steamaccountmanager.app.browser.CsfloatPopupStatus
 import com.steamaccountmanager.app.browser.csfloatDenialMessage
 import java.io.File
 import kotlinx.coroutines.launch
@@ -72,6 +73,9 @@ fun GeckoBrowserScreen(
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
+    val debugBuild = remember(context) {
+        context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+    }
     val scope = rememberCoroutineScope()
     val policy = remember(allowedDomains) {
         WebsitePolicy(allowedDomains.firstOrNull().orEmpty(), allowedDomains.drop(1))
@@ -87,12 +91,15 @@ fun GeckoBrowserScreen(
     var installAllowsDataCollection by remember { mutableStateOf(false) }
     var installDenied by remember { mutableStateOf(false) }
     var updatePinned by remember { mutableStateOf(false) }
-    val tracking = remember { CsfloatTracking() }
-    var trackingState by remember { mutableStateOf(tracking.state) }
+    val popupStatus = remember { CsfloatPopupStatus() }
+    var popupState by remember { mutableStateOf(popupStatus.state) }
     var popupDialog by remember { mutableStateOf<Dialog?>(null) }
     var popupView by remember { mutableStateOf<GeckoView?>(null) }
     var popupSession by remember { mutableStateOf<GeckoSession?>(null) }
     var tempXpi by remember { mutableStateOf<File?>(null) }
+    var failNextPopupForTest by remember { mutableStateOf(false) }
+    var pendingCleanup by remember { mutableStateOf<List<WebExtension>>(emptyList()) }
+    var pendingCleanupSuccess by remember { mutableStateOf("") }
     var runtimeRef: GeckoRuntime? = null
     var currentUrl by remember { mutableStateOf(startUrl) }
     var title by remember { mutableStateOf(websiteId) }
@@ -118,8 +125,8 @@ fun GeckoBrowserScreen(
         }
     }
 
-    fun renderTracking() {
-        trackingState = tracking.state
+    fun renderPopupStatus() {
+        popupState = popupStatus.state
     }
 
     fun closePopup() {
@@ -133,10 +140,10 @@ fun GeckoBrowserScreen(
     }
 
     fun dismissPopup() {
-        tracking.pendingRequest?.let {
-            tracking.failed(it)
+        popupStatus.pendingRequest?.let {
+            popupStatus.failed(it)
             csfloatState = "CSFloat: official popup closed before loading. Retry."
-            renderTracking()
+            renderPopupStatus()
         }
         closePopup()
     }
@@ -145,8 +152,8 @@ fun GeckoBrowserScreen(
         closePopup()
         csfloatExtensionRef = null
         csfloatPopupUri = null
-        tracking.unavailable()
-        renderTracking()
+        popupStatus.unavailable()
+        renderPopupStatus()
     }
 
     fun openPopup(request: Long, uri: String) {
@@ -158,12 +165,12 @@ fun GeckoBrowserScreen(
                     if (session !== popupSession) return
                     if (success) {
                         csfloatState = "CSFloat: official popup opened"
-                        tracking.popupOpened(request)
+                        popupStatus.opened(request)
                     } else {
                         csfloatState = "CSFloat: official popup failed to load. Retry."
-                        tracking.failed(request)
+                        popupStatus.failed(request)
                     }
-                    renderTracking()
+                    renderPopupStatus()
                 }
             }
             open(requireNotNull(runtimeRef))
@@ -180,9 +187,9 @@ fun GeckoBrowserScreen(
         popupDialog = dialog
         popup.loadUri(uri)
     } catch (_: RuntimeException) {
-        tracking.failed(request)
+        popupStatus.failed(request)
         csfloatState = "CSFloat: official popup failed to open. Retry."
-        renderTracking()
+        renderPopupStatus()
         closePopup()
     }
     }
@@ -202,9 +209,54 @@ fun GeckoBrowserScreen(
         }
         csfloatExtensionRef = extension
         csfloatPopupUri = popupUri
-        tracking.actionAvailable()
-        renderTracking()
+        popupStatus.available()
+        renderPopupStatus()
         csfloatState = "CSFloat: enabled"
+    }
+
+    fun cleanupCsfloat(targets: List<WebExtension>, successMessage: String) {
+        clearCsfloat()
+        pendingCleanup = targets
+        pendingCleanupSuccess = successMessage
+        val controller = requireNotNull(runtimeRef).webExtensionController
+        val rejectedIds = targets.map { it.id }.toSet()
+
+        fun cleanupFailed() {
+            clearCsfloat()
+            sessionRef?.loadUri("about:blank")
+            popupStatus.discoveryFailed()
+            renderPopupStatus()
+            csfloatState =
+                "CSFloat: cleanup incomplete; access was closed. Retry cleanup before browsing."
+        }
+
+        fun inspect() {
+            controller.list().accept(
+                { installed ->
+                    if (installed == null || installed.any { it.id in rejectedIds }) {
+                        cleanupFailed()
+                    } else {
+                        pendingCleanup = emptyList()
+                        pendingCleanupSuccess = ""
+                        csfloatState = successMessage
+                    }
+                },
+                { cleanupFailed() },
+            )
+        }
+
+        fun uninstallAt(index: Int) {
+            if (index == targets.size) {
+                inspect()
+            } else {
+                controller.uninstall(targets[index]).accept(
+                    { uninstallAt(index + 1) },
+                    { cleanupFailed() },
+                )
+            }
+        }
+
+        uninstallAt(0)
     }
 
     fun discoverCsfloat() {
@@ -216,9 +268,10 @@ fun GeckoBrowserScreen(
                 }
                 when {
                     byId.isNotEmpty() && exact == null -> {
-                        clearCsfloat()
-                        byId.forEach { requireNotNull(runtimeRef).webExtensionController.uninstall(it) }
-                        csfloatState = "CSFloat: failed package validation. Unexpected package was rejected; retry."
+                        cleanupCsfloat(
+                            byId,
+                            "CSFloat: unexpected package removed after verification. Retry installation.",
+                        )
                     }
                     exact == null -> {
                         clearCsfloat()
@@ -233,8 +286,8 @@ fun GeckoBrowserScreen(
             },
             {
                 clearCsfloat()
-                tracking.discoveryFailed()
-                renderTracking()
+                popupStatus.discoveryFailed()
+                renderPopupStatus()
                 csfloatState = "CSFloat: failed to inspect installed state. Retry."
             },
         )
@@ -247,9 +300,7 @@ fun GeckoBrowserScreen(
                 val enabled = matching.filter { it.metaData.enabled }
                 when {
                     enabled.isNotEmpty() -> {
-                        clearCsfloat()
-                        enabled.forEach { requireNotNull(runtimeRef).webExtensionController.uninstall(it) }
-                        csfloatState = csfloatDenialMessage(CsfloatDenialState.ENABLED)
+                        cleanupCsfloat(enabled, csfloatDenialMessage(CsfloatDenialState.ENABLED))
                     }
                     matching.isNotEmpty() -> {
                         clearCsfloat()
@@ -297,9 +348,15 @@ fun GeckoBrowserScreen(
                             csfloatState = "CSFloat: installed; discovering enabled action…"
                             discoverCsfloat()
                         } else {
-                            extension?.let { requireNotNull(runtimeRef).webExtensionController.uninstall(it) }
-                            clearCsfloat()
-                            csfloatState = "CSFloat: failed package validation. Unexpected package was rejected."
+                            if (extension == null) {
+                                clearCsfloat()
+                                csfloatState = "CSFloat: install returned no package. Retry; browsing remains available."
+                            } else {
+                                cleanupCsfloat(
+                                    listOf(extension),
+                                    "CSFloat: unexpected package removed after verification. Retry installation.",
+                                )
+                            }
                         }
                     },
                     {
@@ -436,31 +493,47 @@ fun GeckoBrowserScreen(
                     TextButton(
                         onClick = {
                             val popupUri = csfloatPopupUri ?: return@TextButton
-                            csfloatState = "CSFloat: official action dispatched"
-                            tracking.request {
-                                openPopup(requireNotNull(tracking.pendingRequest), popupUri)
+                            csfloatState = "CSFloat: opening official popup…"
+                            popupStatus.requestOpen {
+                                val request = requireNotNull(popupStatus.pendingRequest)
+                                if (debugBuild && failNextPopupForTest) {
+                                    failNextPopupForTest = false
+                                    popupStatus.failed(request)
+                                    csfloatState = "CSFloat: official popup failed to open. Retry."
+                                } else {
+                                    openPopup(request, popupUri)
+                                }
                             }
-                            renderTracking()
+                            renderPopupStatus()
                         },
-                        enabled = csfloatPopupUri != null && tracking.pendingRequest == null,
+                        enabled = csfloatPopupUri != null && popupStatus.pendingRequest == null,
                     ) { Text("Open CSFloat") }
                 }
                 Text(
-                    when (trackingState) {
-                        CsfloatTrackingState.UNAVAILABLE -> "Tracking: unavailable"
-                        CsfloatTrackingState.READY -> "Tracking: official action ready"
-                        CsfloatTrackingState.ACTIVE -> "Tracking: active (visible official status recorded)"
-                        CsfloatTrackingState.FAILED -> "Tracking: action failed; retry discovery"
+                    when (popupState) {
+                        CsfloatPopupState.UNAVAILABLE -> "CSFloat popup: unavailable"
+                        CsfloatPopupState.AVAILABLE ->
+                            "CSFloat popup: available. Inspect tracking status inside the official popup."
+                        CsfloatPopupState.OPENED ->
+                            "CSFloat popup: opened. Tracking status is shown only inside the official popup."
+                        CsfloatPopupState.FAILED -> "CSFloat popup: failed. Retry is available."
                     },
                     modifier = Modifier.padding(horizontal = 8.dp),
                 )
                 Row {
-                    TextButton(
-                        onClick = { tracking.recordVisibleStatus(); renderTracking() },
-                        enabled = trackingState == CsfloatTrackingState.READY && tracking.officialSurfaceOpened,
-                    ) { Text("Record visible CSFloat status") }
-                    if (trackingState == CsfloatTrackingState.FAILED) {
-                        TextButton(onClick = { tracking.recover(); renderTracking(); discoverCsfloat() }) {
+                    if (debugBuild && popupState == CsfloatPopupState.AVAILABLE) {
+                        TextButton(onClick = { failNextPopupForTest = true }) {
+                            Text("Test CSFloat popup failure")
+                        }
+                    }
+                    if (popupState == CsfloatPopupState.FAILED) {
+                        TextButton(onClick = {
+                            popupStatus.recover()
+                            renderPopupStatus()
+                            val targets = pendingCleanup
+                            if (targets.isEmpty()) discoverCsfloat()
+                            else cleanupCsfloat(targets, pendingCleanupSuccess)
+                        }) {
                             Text("Retry CSFloat")
                         }
                     }

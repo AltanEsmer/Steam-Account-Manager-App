@@ -348,7 +348,19 @@ class ProductionGeckoSessionTest {
             waitForTextContaining(automation, "Version: 5.17.0")
             clickText(automation, "Accept CSFloat access")
             waitForTextContaining(automation, "CSFloat: enabled")
-            waitForTextContaining(automation, "Tracking: official action ready")
+            waitForTextContaining(
+                automation,
+                "CSFloat popup: available. Inspect tracking status inside the official popup.",
+            )
+            clickText(automation, "Test CSFloat popup failure")
+            clickText(automation, "Open CSFloat")
+            waitForTextContaining(automation, "CSFloat: official popup failed to open. Retry.")
+            waitForTextContaining(automation, "CSFloat popup: failed. Retry is available.")
+            clickText(automation, "Retry CSFloat")
+            waitForTextContaining(
+                automation,
+                "CSFloat popup: available. Inspect tracking status inside the official popup.",
+            )
             clickText(automation, "Open CSFloat")
             waitForTextContaining(automation, "Offer Tracking Enabled")
             SystemClock.sleep(1_000)
@@ -357,21 +369,26 @@ class ProductionGeckoSessionTest {
                 automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK),
             )
             waitForTextContaining(automation, "CSFloat: official popup opened")
-            clickText(automation, "Record visible CSFloat status")
-            waitForTextContaining(automation, "Tracking: active (visible official status recorded)")
+            waitForTextContaining(
+                automation,
+                "CSFloat popup: opened. Tracking status is shown only inside the official popup.",
+            )
 
             BrowserProcessController.openWebsite(context, sessionB, steamListing, listOf("steamcommunity.com"))
             waitForText(automation, "Allow Steam profile detection?")
             clickText(automation, "Allow and continue")
             waitForTextContaining(automation, "CSFloat: absent")
-            assertFalse("Session B exposed session A's active CSFloat state", hasTextContaining(
+            assertFalse("Session B exposed session A's opened CSFloat popup state", hasTextContaining(
                 automation.rootInActiveWindow,
-                "Tracking: active",
+                "CSFloat popup: opened",
             ))
 
             BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
             waitForTextContaining(automation, "CSFloat: enabled")
-            waitForTextContaining(automation, "Tracking: official action ready")
+            waitForTextContaining(
+                automation,
+                "CSFloat popup: available. Inspect tracking status inside the official popup.",
+            )
         } finally {
             stopBrowserWorker(context)
         }
