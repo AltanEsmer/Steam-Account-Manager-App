@@ -9,12 +9,12 @@ Status: **Machine/emulator verification PASS at application/test source `e4ee283
 - Branch: `codex/geckoview-campaign`
 - Variant: debug
 - Preserved evidence directory:
-  `C:\Users\esmer\AppData\Local\Temp\sam-gv10-a07a64e`
-- `app-debug.apk`: 599,546,814 bytes; SHA-256
-  `524CAF9B1B8B19994F62A563CC1C7A9B1DD74D25A89E767A6E6446BC051BA038`
-- `app-debug-androidTest.apk`: 2,402,787 bytes; SHA-256
-  `1E65AAC94F6646C36D0932B32F92BE05BDFAB03AB2093AD5369F258D48978680`
-- Verification completed: 2026-09-07 16:25 CEST
+  `C:\Users\esmer\AppData\Local\Temp\sam-gv10-d88e5d4-primary`
+- `app-debug.apk`: 599,073,913 bytes; SHA-256
+  `7B1F7AF2BD3CD8817D2ABFA5A3FD4098DDBFC221DE5A7D9A0C31BC6DEDDB70F0`
+- `app-debug-androidTest.apk`: 2,305,102 bytes; SHA-256
+  `E6BE00409CFA52CF951385C73FF6267AB3F10A5E9FCD8108191D5E2E0367AF35`
+- Verification completed: 2026-09-07 16:36 CEST
 
 ## Approved extension artifact
 
@@ -109,7 +109,15 @@ Boolean failures and ordinary I/O exceptions keep the session blank and retryabl
 Successful-null extension lists now fail closed, and no URL is persisted at all.
 The current authorized launch URL is kept only in memory for external recovery.
 
-The fresh unit/build/lint command at exact source `a07a64e` was:
+A third final review exposed a startup-list/install race, untruthful recovery when
+the trusted marker could not be recreated, and an implicit rather than explicit
+tracking-state proof. Commits `fea5ba2` through `e4ee283` keep installation disabled
+until startup trust inspection completes, retain a visible retryable failed state
+when quarantine clearance fails, and prove the real public Firefox transition from
+absent/unavailable to the installed official popup's enabled tracking label. No
+Chromium permission toggle was introduced or simulated.
+
+The fresh unit/build/lint command at exact source `e4ee283` was:
 
 ```powershell
 $env:ANDROID_HOME = 'C:\Users\esmer\AppData\Local\Android\Sdk'
@@ -117,7 +125,7 @@ $env:ANDROID_SERIAL = 'emulator-5580'
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug lintRelease --rerun-tasks --console=plain
 ```
 
-Exit 0 in 57 seconds; all 103 tasks executed. All 69 unit tests passed with
+Exit 0 in 60 seconds; all 103 tasks executed. All 70 unit tests passed with
 zero failures, errors, or skips. Debug and Android-test APK assembly passed. Debug
 lint reported 123 warnings and zero errors; release lint reported 55 warnings and
 zero errors. The result XML files are under
@@ -128,13 +136,13 @@ The exact APK install commands were:
 
 ```powershell
 $adb = 'C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
-& $adb -s emulator-5580 install --incremental -r app\build\outputs\apk\debug\app-debug.apk
-& $adb -s emulator-5580 install -r -t app\build\outputs\apk\androidTest\debug\app-debug-androidTest.apk
+& $adb -s emulator-5580 install --incremental app\build\outputs\apk\debug\app-debug.apk
+& $adb -s emulator-5580 install -r app\build\outputs\apk\androidTest\debug\app-debug-androidTest.apk
 ```
 
 The dedicated AVD remained storage-constrained. After verifying the exact package
 names, only the campaign-owned debug and test packages were uninstalled; both
-removals exited 0. The exact `a07a64e` main APK then installed incrementally and the
+removals exited 0. The exact `e4ee283` main APK then installed incrementally and the
 exact test APK installed by streaming, both with exit 0.
 
 The final full emulator command was:
@@ -143,7 +151,7 @@ The final full emulator command was:
 & $adb -s emulator-5580 shell am instrument -w -r com.steamaccountmanager.app.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-Exit 0; 33/33 tests passed in 397.072 seconds. The runner exercised the complete
+Exit 0; 33/33 tests passed in 426.471 seconds. The runner exercised the complete
 production CSFloat denial and acceptance paths; official-popup rendering;
 popup-failure/retry; cleanup-failure, immediate safe blanking, retry, and
 list-confirmed absence; denied-verification failure, safe blanking, disabled
@@ -166,7 +174,7 @@ Chromium optional-permission toggle and does not claim a live tracking update.
 
 After the run, the app and test packages were force-stopped and `pidof` returned no
 app-owned main, Gecko, or Gecko-child process. `git diff --check` passed and the
-tracked worktree was clean at exact application/test source `a07a64e` before this
+tracked worktree was clean at exact application/test source `e4ee283` before this
 receipt-only update.
 
 ## Security, privacy, and limitations
