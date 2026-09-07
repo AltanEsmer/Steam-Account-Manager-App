@@ -864,42 +864,51 @@ fun GeckoBrowserScreen(
                     if (debugBuild && popupState == CsfloatPopupState.AVAILABLE) {
                         TextButton(onClick = {
                             val extension = installedCsfloatRef ?: return@TextButton
+                            val controller = requireNotNull(runtimeRef).webExtensionController
+                            val generation = mutationGeneration
                             updateTestState = "CSFloat update test: verifying denial and installed package…"
                             promptDelegate.onUpdatePrompt(extension, emptyArray(), emptyArray(), emptyArray()).accept(
                                 { decision ->
-                                    if (decision != AllowOrDeny.DENY) {
+                                    if (generation != mutationGeneration) Unit
+                                    else if (decision != AllowOrDeny.DENY) {
                                         quarantine()
                                         updateTestState = "CSFloat update test failed: update was not denied; access closed."
                                     } else {
-                                        requireNotNull(runtimeRef).webExtensionController.list().accept(
+                                        controller.list().accept(
                                             { extensions ->
-                                                val exact = extensions?.singleOrNull {
-                                                    CsfloatExtensionContract.isExpected(
-                                                        it.id,
-                                                        it.metaData.version,
-                                                        it.metaData.signedState,
-                                                    ) && it.metaData.enabled
-                                                }
-                                                if (exact == null) {
-                                                    quarantine()
-                                                    updateTestState =
-                                                        "CSFloat update test failed: exact installed state changed; access closed."
-                                                } else {
-                                                    updateTestState =
-                                                        "CSFloat update test: DENY confirmed; exact 5.17.0 signed enabled unchanged."
+                                                if (generation == mutationGeneration) {
+                                                    val exact = extensions?.singleOrNull {
+                                                        CsfloatExtensionContract.isExpected(
+                                                            it.id,
+                                                            it.metaData.version,
+                                                            it.metaData.signedState,
+                                                        ) && it.metaData.enabled
+                                                    }
+                                                    if (exact == null) {
+                                                        quarantine()
+                                                        updateTestState =
+                                                            "CSFloat update test failed: exact installed state changed; access closed."
+                                                    } else {
+                                                        updateTestState =
+                                                            "CSFloat update test: DENY confirmed; exact 5.17.0 signed enabled unchanged."
+                                                    }
                                                 }
                                             },
                                             {
-                                                quarantine()
-                                                updateTestState =
-                                                    "CSFloat update test failed: installed state unavailable; access closed."
+                                                if (generation == mutationGeneration) {
+                                                    quarantine()
+                                                    updateTestState =
+                                                        "CSFloat update test failed: installed state unavailable; access closed."
+                                                }
                                             },
                                         )
                                     }
                                 },
                                 {
-                                    quarantine()
-                                    updateTestState = "CSFloat update test failed: denial result unavailable; access closed."
+                                    if (generation == mutationGeneration) {
+                                        quarantine()
+                                        updateTestState = "CSFloat update test failed: denial result unavailable; access closed."
+                                    }
                                 },
                             )
                         }) { Text("Test pinned CSFloat update") }
