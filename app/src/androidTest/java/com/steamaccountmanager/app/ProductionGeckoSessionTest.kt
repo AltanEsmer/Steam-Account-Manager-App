@@ -325,6 +325,52 @@ class ProductionGeckoSessionTest {
     }
 
     @Test
+    fun productionCsfloatDeniedVerificationFailureBlanksAndRetriesInspection() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val runMarker = UUID.randomUUID().toString().replace("-", "")
+        val sessionId = SessionIdentifier("instrumentation-csfloat-denial-query-$runMarker", "steam")
+        val server = LoopbackFixture(runMarker)
+        val pageMarker = marker("DENIAL-QUERY", "DENIAL-QUERY", "DENIAL-QUERY", "DENIAL-QUERY")
+
+        try {
+            stopBrowserWorker(context)
+            clearSyntheticDetectorConsent(context, sessionId)
+            server.start()
+            open(context, sessionId, server.url("DENIAL-QUERY"))
+            waitForText(automation, "Allow Steam profile detection?")
+            clickText(automation, "Allow and continue")
+            waitForText(automation, pageMarker)
+            waitForTextContaining(automation, "CSFloat: absent")
+            clickText(automation, "Test denied verification failure")
+            clickText(automation, "Install CSFloat")
+            waitForText(automation, "Install-time CSFloat access request")
+            clickText(automation, "Deny CSFloat access")
+
+            waitForTextContaining(
+                automation,
+                "CSFloat: consent denied but extension state could not be verified. Access was closed; retry inspection.",
+            )
+            waitForTextContaining(automation, "CSFloat popup: failed. Retry is available.")
+            assertControlEnabled(automation, "Install CSFloat", false)
+            waitForTextToDisappear(automation, pageMarker)
+            waitForText(automation, "Open externally")
+
+            clickText(automation, "Retry CSFloat")
+            waitForTextContaining(
+                automation,
+                "CSFloat: consent denied; extension absent; browsing remains available.",
+            )
+            waitForText(automation, pageMarker)
+            waitForTextContaining(automation, "CSFloat popup: unavailable")
+        } finally {
+            stopBrowserWorker(context)
+            server.close()
+        }
+    }
+
+    @Test
     fun productionCsfloatCleanupFailureBlanksThenRetriesToConfirmedAbsence() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext
