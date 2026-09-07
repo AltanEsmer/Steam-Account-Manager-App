@@ -141,6 +141,13 @@ fun GeckoBrowserScreen(
         popupState = popupStatus.state
     }
 
+    fun quarantineRestoreFailed(message: String) {
+        csfloatQuarantined = true
+        popupStatus.discoveryFailed()
+        renderPopupStatus()
+        csfloatState = message
+    }
+
     fun maybeLoadInitialPage() {
         if (!initialPageLoaded && detectorReady && trustInspectionComplete && !csfloatQuarantined) {
             initialPageLoaded = true
@@ -345,7 +352,9 @@ fun GeckoBrowserScreen(
                             if (clearQuarantineAndRestore()) {
                                 csfloatState = absentMessage ?: "CSFloat: absent"
                             } else {
-                                csfloatState = "CSFloat: quarantine persistence failed. Access remains closed; retry."
+                                quarantineRestoreFailed(
+                                    "CSFloat: quarantine clearance failed. Access remains closed; retry inspection.",
+                                )
                             }
                         } else {
                             csfloatState = absentMessage ?: "CSFloat: absent"
@@ -358,6 +367,10 @@ fun GeckoBrowserScreen(
                         if (csfloatQuarantined) {
                             if (clearQuarantineAndRestore()) {
                                 csfloatState = "CSFloat: quarantine cleared; extension disabled; browsing restored."
+                            } else {
+                                quarantineRestoreFailed(
+                                    "CSFloat: extension is disabled but quarantine clearance failed. Access remains closed; retry inspection.",
+                                )
                             }
                         } else {
                             csfloatState = "CSFloat: denied or disabled"
@@ -429,15 +442,25 @@ fun GeckoBrowserScreen(
                     }
                     matching.isNotEmpty() -> {
                         clearCsfloat()
-                        pendingDeniedVerification = false
-                        csfloatState = csfloatDenialMessage(CsfloatDenialState.DISABLED)
-                        clearQuarantineAndRestore()
+                        if (clearQuarantineAndRestore()) {
+                            pendingDeniedVerification = false
+                            csfloatState = csfloatDenialMessage(CsfloatDenialState.DISABLED)
+                        } else {
+                            quarantineRestoreFailed(
+                                "CSFloat: consent denied and extension disabled, but quarantine clearance failed. Access remains closed; retry inspection.",
+                            )
+                        }
                     }
                     else -> {
                         clearCsfloat()
-                        pendingDeniedVerification = false
-                        csfloatState = csfloatDenialMessage(CsfloatDenialState.ABSENT)
-                        clearQuarantineAndRestore()
+                        if (clearQuarantineAndRestore()) {
+                            pendingDeniedVerification = false
+                            csfloatState = csfloatDenialMessage(CsfloatDenialState.ABSENT)
+                        } else {
+                            quarantineRestoreFailed(
+                                "CSFloat: consent denied and extension absent, but quarantine clearance failed. Access remains closed; retry inspection.",
+                            )
+                        }
                     }
                 }
             },
@@ -624,8 +647,9 @@ fun GeckoBrowserScreen(
                     Text(csfloatState, modifier = Modifier.weight(1f), maxLines = 2)
                     TextButton(
                         onClick = { installCsfloat() },
-                        enabled = !csfloatBusy && csfloatExtensionRef == null &&
-                            !csfloatQuarantined && !pendingDeniedVerification && pendingCleanup.isEmpty(),
+                        enabled = csfloatInstallEnabled(trustInspectionComplete, csfloatQuarantined) &&
+                            !csfloatBusy && csfloatExtensionRef == null &&
+                            !pendingDeniedVerification && pendingCleanup.isEmpty(),
                     ) {
                         Text(if (csfloatBusy) "Installing" else "Install CSFloat")
                     }
@@ -982,3 +1006,6 @@ private const val DETECTOR_URI = "resource://android/assets/steam-profile-detect
 private const val DETECTOR_EXTENSION_ID = "steam-profile-detector@steam-account-manager.invalid"
 private const val DETECTOR_NATIVE_APP = "steamProfileDetector"
 private const val REJECTED_NAVIGATION_MESSAGE = "This link cannot be opened safely. You can stay here and try another link."
+
+internal fun csfloatInstallEnabled(trustInspectionComplete: Boolean, quarantined: Boolean) =
+    trustInspectionComplete && !quarantined
