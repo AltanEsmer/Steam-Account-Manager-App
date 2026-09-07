@@ -438,33 +438,45 @@ fun GeckoBrowserScreen(
         } else {
             controller.disable(target, WebExtensionController.EnableSource.APP)
         }
+
+        fun inspect(allowDelayedRetry: Boolean) {
+            controller.list().accept(
+                success@{ extensions ->
+                    if (generation != mutationGeneration) return@success
+                    val exact = extensions?.singleOrNull {
+                        CsfloatExtensionContract.isExpected(it.id, it.metaData.version, it.metaData.signedState)
+                    }
+                    if (exact != null && exact.metaData.enabled != enable && allowDelayedRetry) {
+                        Handler(Looper.getMainLooper()).postDelayed(
+                            { if (generation == mutationGeneration) inspect(false) },
+                            500,
+                        )
+                        return@success
+                    }
+                    if (exact == null || exact.metaData.enabled != enable) {
+                        failed()
+                        return@success
+                    }
+                    installedCsfloatRef = exact
+                    csfloatBusy = false
+                    if (!clearQuarantineAndRestore()) {
+                        failed()
+                    } else if (enable) {
+                        bindCsfloat(exact)
+                    } else {
+                        clearCsfloat()
+                        installedCsfloatRef = exact
+                        csfloatState = "CSFloat: disabled (${exact.metaData.version}, signed); browsing restored."
+                    }
+                },
+                { failed() },
+            )
+        }
+
         operation.accept(
             {
                 if (generation != mutationGeneration) return@accept
-                controller.list().accept(
-                    success@{ extensions ->
-                        if (generation != mutationGeneration) return@success
-                        val exact = extensions?.singleOrNull {
-                            CsfloatExtensionContract.isExpected(it.id, it.metaData.version, it.metaData.signedState)
-                        }
-                        if (exact == null || exact.metaData.enabled != enable) {
-                            failed()
-                            return@success
-                        }
-                        installedCsfloatRef = exact
-                        csfloatBusy = false
-                        if (!clearQuarantineAndRestore()) {
-                            failed()
-                        } else if (enable) {
-                            bindCsfloat(exact)
-                        } else {
-                            clearCsfloat()
-                            installedCsfloatRef = exact
-                            csfloatState = "CSFloat: disabled (${exact.metaData.version}, signed); browsing restored."
-                        }
-                    },
-                    { failed() },
-                )
+                inspect(true)
             },
             { failed() },
         )
