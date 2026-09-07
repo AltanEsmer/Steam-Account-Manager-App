@@ -7,6 +7,18 @@ import org.junit.Test
 
 class CsfloatExtensionContractTest {
     @Test
+    fun popupStateNeverClaimsTrackingIsActive() {
+        val popup = CsfloatPopupStatus()
+        assertEquals(CsfloatPopupState.UNAVAILABLE, popup.state)
+        popup.available()
+        assertEquals(CsfloatPopupState.AVAILABLE, popup.state)
+        val request = popup.requestOpen {}
+        assertTrue(popup.opened(request))
+        assertEquals(CsfloatPopupState.OPENED, popup.state)
+        assertFalse(CsfloatPopupState.entries.any { it.name == "ACTIVE" })
+    }
+
+    @Test
     fun productionContractPinsTheReviewedOfficialPackage() {
         assertEquals(
             "https://addons.mozilla.org/firefox/downloads/file/4957680/csgofloat-5.17.0.xpi",
