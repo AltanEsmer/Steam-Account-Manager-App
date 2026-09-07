@@ -88,6 +88,19 @@ object CsfloatExtensionContract {
 
 enum class CsfloatTrackingState { UNAVAILABLE, READY, ACTIVE, FAILED }
 
+enum class CsfloatDenialState { ABSENT, DISABLED, ENABLED, QUERY_FAILED }
+
+fun csfloatDenialMessage(state: CsfloatDenialState): String = when (state) {
+    CsfloatDenialState.ABSENT ->
+        "CSFloat: consent denied; extension absent; browsing remains available."
+    CsfloatDenialState.DISABLED ->
+        "CSFloat: consent denied; extension disabled; browsing remains available."
+    CsfloatDenialState.ENABLED ->
+        "CSFloat: consent denied but extension remained enabled; it was removed. Retry or browse externally."
+    CsfloatDenialState.QUERY_FAILED ->
+        "CSFloat: consent denied but extension state could not be verified. Close or retry."
+}
+
 class CsfloatTracking {
     var state = CsfloatTrackingState.UNAVAILABLE
         private set

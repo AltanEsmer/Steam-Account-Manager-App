@@ -313,7 +313,10 @@ class ProductionGeckoSessionTest {
             waitForText(automation, "Install-time CSFloat access request")
             waitForTextContaining(automation, "*://*.steampowered.com/*")
             clickText(automation, "Deny CSFloat access")
-            waitForTextContaining(automation, "CSFloat: absent")
+            waitForTextContaining(
+                automation,
+                "CSFloat: consent denied; extension absent; browsing remains available.",
+            )
             waitForTextContaining(automation, "PROD-GECKO|requested=CSFLOAT-DENY")
         } finally {
             stopBrowserWorker(context)

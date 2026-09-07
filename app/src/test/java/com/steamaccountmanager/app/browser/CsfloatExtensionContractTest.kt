@@ -74,6 +74,20 @@ Data collection (1):
     }
 
     @Test
+    fun denialMessagesDistinguishSafeAndFailClosedOutcomes() {
+        assertEquals(
+            "CSFloat: consent denied; extension absent; browsing remains available.",
+            csfloatDenialMessage(CsfloatDenialState.ABSENT),
+        )
+        assertEquals(
+            "CSFloat: consent denied; extension disabled; browsing remains available.",
+            csfloatDenialMessage(CsfloatDenialState.DISABLED),
+        )
+        assertTrue(csfloatDenialMessage(CsfloatDenialState.ENABLED).contains("it was removed"))
+        assertTrue(csfloatDenialMessage(CsfloatDenialState.QUERY_FAILED).contains("could not be verified"))
+    }
+
+    @Test
     fun trackingRequiresCurrentPopupAndVisibleOfficialStatus() {
         val tracking = CsfloatTracking()
         tracking.actionAvailable()

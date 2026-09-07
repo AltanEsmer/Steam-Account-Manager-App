@@ -43,8 +43,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.steamaccountmanager.app.browser.SteamLoginDetector
 import com.steamaccountmanager.app.browser.WebsitePolicy
 import com.steamaccountmanager.app.browser.CsfloatExtensionContract
+import com.steamaccountmanager.app.browser.CsfloatDenialState
 import com.steamaccountmanager.app.browser.CsfloatTracking
 import com.steamaccountmanager.app.browser.CsfloatTrackingState
+import com.steamaccountmanager.app.browser.csfloatDenialMessage
 import java.io.File
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -83,6 +85,7 @@ fun GeckoBrowserScreen(
     var installPromptText by remember { mutableStateOf<String?>(null) }
     var installPromptResult by remember { mutableStateOf<GeckoResult<WebExtension.PermissionPromptResponse>?>(null) }
     var installAllowsDataCollection by remember { mutableStateOf(false) }
+    var installDenied by remember { mutableStateOf(false) }
     var updatePinned by remember { mutableStateOf(false) }
     val tracking = remember { CsfloatTracking() }
     var trackingState by remember { mutableStateOf(tracking.state) }
@@ -129,6 +132,15 @@ fun GeckoBrowserScreen(
         popupSession = null
     }
 
+    fun dismissPopup() {
+        tracking.pendingRequest?.let {
+            tracking.failed(it)
+            csfloatState = "CSFloat: official popup closed before loading. Retry."
+            renderTracking()
+        }
+        closePopup()
+    }
+
     fun clearCsfloat() {
         closePopup()
         csfloatExtensionRef = null
@@ -160,7 +172,7 @@ fun GeckoBrowserScreen(
         val dialog = Dialog(context).apply {
             setTitle("Official CSFloat popup")
             setContentView(view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-            setOnDismissListener { closePopup() }
+            setOnDismissListener { dismissPopup() }
             show()
         }
         popupSession = popup
@@ -228,9 +240,38 @@ fun GeckoBrowserScreen(
         )
     }
 
+    fun verifyDeniedCsfloat() {
+        requireNotNull(runtimeRef).webExtensionController.list().accept(
+            { extensions ->
+                val matching = extensions.orEmpty().filter { it.id == CsfloatExtensionContract.ID }
+                val enabled = matching.filter { it.metaData.enabled }
+                when {
+                    enabled.isNotEmpty() -> {
+                        clearCsfloat()
+                        enabled.forEach { requireNotNull(runtimeRef).webExtensionController.uninstall(it) }
+                        csfloatState = csfloatDenialMessage(CsfloatDenialState.ENABLED)
+                    }
+                    matching.isNotEmpty() -> {
+                        clearCsfloat()
+                        csfloatState = csfloatDenialMessage(CsfloatDenialState.DISABLED)
+                    }
+                    else -> {
+                        clearCsfloat()
+                        csfloatState = csfloatDenialMessage(CsfloatDenialState.ABSENT)
+                    }
+                }
+            },
+            {
+                clearCsfloat()
+                csfloatState = csfloatDenialMessage(CsfloatDenialState.QUERY_FAILED)
+            },
+        )
+    }
+
     fun installCsfloat() {
         if (csfloatBusy) return
         csfloatBusy = true
+        installDenied = false
         csfloatState = "CSFloat: installing verified package…"
         scope.launch {
             try {
@@ -244,7 +285,9 @@ fun GeckoBrowserScreen(
                         file.delete()
                         tempXpi = null
                         csfloatBusy = false
-                        if (extension != null && CsfloatExtensionContract.isExpected(
+                        if (installDenied) {
+                            verifyDeniedCsfloat()
+                        } else if (extension != null && CsfloatExtensionContract.isExpected(
                                 extension.id,
                                 extension.metaData.version,
                                 extension.metaData.signedState,
@@ -263,7 +306,13 @@ fun GeckoBrowserScreen(
                         file.delete()
                         tempXpi = null
                         csfloatBusy = false
-                        discoverCsfloat()
+                        if (installDenied) {
+                            verifyDeniedCsfloat()
+                        } else {
+                            clearCsfloat()
+                            csfloatState =
+                                "CSFloat: install failed. Check the network and retry; browsing remains available."
+                        }
                     },
                 )
             } catch (_: Exception) {
@@ -416,7 +465,14 @@ fun GeckoBrowserScreen(
                         }
                     }
                 }
-                if (updatePinned) Text("CSFloat update denied: reviewed version 5.17.0 remains pinned.", Modifier.padding(8.dp))
+                Text(
+                    if (updatePinned) {
+                        "CSFloat update denied: reviewed version 5.17.0 remains pinned."
+                    } else {
+                        "CSFloat update policy: reviewed version 5.17.0 is pinned; updates require review."
+                    },
+                    Modifier.padding(8.dp),
+                )
             }
         }
         if (loading) {
@@ -604,6 +660,7 @@ fun GeckoBrowserScreen(
     installPromptText?.let { prompt ->
         AlertDialog(
             onDismissRequest = {
+                installDenied = true
                 installPromptResult?.complete(WebExtension.PermissionPromptResponse(false, false, false))
                 installPromptResult = null
                 installPromptText = null
@@ -613,6 +670,7 @@ fun GeckoBrowserScreen(
             text = { Text(prompt) },
             confirmButton = {
                 TextButton(onClick = {
+                    installDenied = false
                     installPromptResult?.complete(
                         WebExtension.PermissionPromptResponse(true, false, installAllowsDataCollection),
                     )
@@ -622,6 +680,7 @@ fun GeckoBrowserScreen(
             },
             dismissButton = {
                 TextButton(onClick = {
+                    installDenied = true
                     installPromptResult?.complete(WebExtension.PermissionPromptResponse(false, false, false))
                     installPromptResult = null
                     installPromptText = null
