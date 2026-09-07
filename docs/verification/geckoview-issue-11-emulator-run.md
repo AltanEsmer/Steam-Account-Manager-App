@@ -5,13 +5,17 @@
 - Source/test checkpoint: `4424bfb81c1fcc21e830ced24535256e9caa1514`
 - Production implementation checkpoint: `4424bfb81c1fcc21e830ced24535256e9caa1514`
 - Starting checkpoint: `1a112ab71cd0ff41caad7164a65d1acb9949f20c`
+- Verification timestamp: `2026-09-07T19:03:27+02:00`
+- Host: Windows 11 Pro `10.0.26200`, build 26200
+- Android Studio: 2025.2.1, `AI-252.25557.131.2521.14432022`
 - Variant: `debug`
-- Emulator: `emulator-5580`, Android 16 / API 36, `sdk_gphone64_x86_64`
+- Dedicated AVD: `Codex_GeckoView_Campaign_API_36`, serial `emulator-5580`,
+  Android 16 / API 36, `sdk_gphone64_x86_64`, `x86_64`
 - GeckoView: `153.0.20260810162159`
 - CSFloat: official signed 5.17.0, ID
   `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}`, observed signed state `2`
-- App APK: 599,585,186 bytes, SHA-256
-  `B43B654853CAE769529CFB131039363DD9312E02E8701A173B6C74322E559894`
+- App APK: 599,090,297 bytes, SHA-256
+  `49C571753E841125C2D88834613E3103E7071B2FAE2F3BDFC521BA3299896CE4`
 - Test APK: 2,313,942 bytes, SHA-256
   `74D5B7890FE5582D8B381FAF4AB459D03BFFB01877EF20AF256554B7E1E4EEFF`
 
@@ -63,6 +67,29 @@ OK (1 test), 44.687s
 
 bounded-inspection repair, second clean exact install, lifecycle run 2
 OK (1 test), 44.640s
+
+gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug lintRelease --rerun-tasks
+BUILD SUCCESSFUL (1m08s), 103/103 tasks; 70/70 unit tests; zero lint errors
+
+fresh exact install; pulled app and test base APKs
+local/device size and SHA-256 matched for both APKs
+
+full instrumentation, first post-repair run
+33/34 passed; the pre-existing navigation-gate test missed its Back readiness timeout
+
+isolated navigationGateExposesControlsAndBlocksWithoutAutomaticHandoff
+OK (1 test), 13.014s
+
+clean exact reinstall; diagnosed full-suite retry
+OK (34 tests), 573.607s
+
+clean exact reinstall; fixed-profile default phase
+OK (1 test), 48.660s
+
+adb -s emulator-5580 shell am force-stop com.steamaccountmanager.app.debug
+
+same method with -e issue11RestartPhase verify-after-force-stop
+OK (1 test), 12.203s
 ```
 
 The five-test run covered install denial and acceptance, callback-derived required
@@ -85,6 +112,18 @@ for at most 25 seconds. It does not retry the mutation. Null, absent, wrong-iden
 wrong-version/signature, and exhausted previous-state results remain recoverable
 fail-closed failures. Two clean exact-install lifecycle runs passed consecutively in
 44.687s and 44.640s after this repair.
+
+Primary exact-head verification then rebuilt every required task and installed the
+fresh universal app APK incrementally. Pulled device APKs matched the local files
+byte-for-byte. The first full post-repair suite had one unrelated navigation timing
+failure after 25 preceding tests; that same test passed alone in 13.014s. A clean,
+diagnosed full-suite retry passed all 34 tests in 573.607s. The required external
+whole-app force-stop sequence then passed in fresh target processes: the default
+phase left A exact enabled and B absent, and the verification phase restored those
+states after force-stop. The emulator network throttle was set to `full` before the
+successful runs after a prior run showed only official-artifact download timeouts;
+the host artifact returned HTTP 200 with the pinned 7,011,169-byte length, and the
+emulator reported a validated network with the artifact host's port 443 reachable.
 
 Immediately after the incremental reinstall, two setup attempts timed out before the
 initial detector-consent screen because an Android `System UI isn't responding`
