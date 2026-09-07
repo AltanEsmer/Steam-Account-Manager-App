@@ -278,8 +278,9 @@ fun GeckoBrowserScreen(
                                 extension.metaData.signedState,
                             )
                         ) {
-                            bindCsfloat(extension)
                             sessionRef?.reload()
+                            csfloatState = "CSFloat: installed; discovering enabled action…"
+                            discoverCsfloat()
                         } else {
                             extension?.let { requireNotNull(runtimeRef).webExtensionController.uninstall(it) }
                             clearCsfloat()
