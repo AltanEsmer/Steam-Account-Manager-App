@@ -2,25 +2,26 @@
 
 ## Build and environment
 
-- Source/test checkpoint: `3982a95a1ee06fd4ddf4f798bb922dd34ab7e63e`
-- Production implementation checkpoint: `9f02d320520f8b78b641fa9a2b5216ac877bf866`
+- Source/test checkpoint: `4424bfb81c1fcc21e830ced24535256e9caa1514`
+- Production implementation checkpoint: `4424bfb81c1fcc21e830ced24535256e9caa1514`
 - Starting checkpoint: `1a112ab71cd0ff41caad7164a65d1acb9949f20c`
 - Variant: `debug`
 - Emulator: `emulator-5580`, Android 16 / API 36, `sdk_gphone64_x86_64`
 - GeckoView: `153.0.20260810162159`
 - CSFloat: official signed 5.17.0, ID
   `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}`, observed signed state `2`
-- App APK: 599,568,666 bytes, SHA-256
-  `A01695F3752A5CB8355DA58D0EC40C12F65821C31A9D96F8BDE3E0EA078D20ED`
-- Test APK: 2,411,747 bytes, SHA-256
-  `33B23FB47096FB2ACCBE117B0731812FF180C15462A6F6D26B756B330B078092`
+- App APK: 599,585,186 bytes, SHA-256
+  `B43B654853CAE769529CFB131039363DD9312E02E8701A173B6C74322E559894`
+- Test APK: 2,313,942 bytes, SHA-256
+  `74D5B7890FE5582D8B381FAF4AB459D03BFFB01877EF20AF256554B7E1E4EEFF`
 
 Every device command used `adb -s emulator-5580`. Installation initially lacked
 temporary space, so only the prior scoped app and test packages were removed before
 installing these APKs; no unrelated package or emulator state was changed.
 The app used Android incremental installation because the universal APK exceeded the
-package manager's temporary-space reserve. Pulling the installed `base.apk` produced
-the same 599,568,666-byte size and SHA-256 as the local candidate.
+package manager's temporary-space reserve. The earlier pulled `base.apk` matched its
+local candidate byte-for-byte; both bounded-repair runs used clean incremental installs
+of the exact final APK recorded above.
 
 ## Commands and results
 
@@ -56,6 +57,12 @@ adb -s emulator-5580 shell am force-stop com.steamaccountmanager.app.debug
 
 same method with -e issue11RestartPhase verify-after-force-stop
 OK (1 test), 8.073s
+
+bounded-inspection repair, clean exact install, lifecycle run 1
+OK (1 test), 44.687s
+
+bounded-inspection repair, second clean exact install, lifecycle run 2
+OK (1 test), 44.640s
 ```
 
 The five-test run covered install denial and acceptance, callback-derived required
@@ -70,12 +77,14 @@ Before repair, the exact amended source failed twice after Disable, browser-scre
 close/reopen, and explicit Enable: the test timed out at line 531 waiting for the
 exact enabled state. A later diagnostic run passed in 96.525s, identifying an
 intermittent Gecko callback/list propagation race rather than an install-network
-failure. The repair retains quarantine after the mutation callback and, only when a
-non-null list still contains the exact reviewed extension with its previous enabled
-flag, performs one generation-guarded inspection 500ms later. It does not retry the
-mutation. Null, absent, wrong-identity, and repeated previous-state results remain
-recoverable fail-closed failures. The two consecutive amended passes and subsequent
-five-test pass above are the post-repair proof.
+failure. A single delayed inspection remained insufficient in a later exact-candidate
+run, which reproduced the same line-543 failure. The bounded repair retains
+quarantine after the mutation callback and, only while a non-null list still contains
+the exact reviewed extension with its previous enabled flag, reinspects every 500ms
+for at most 25 seconds. It does not retry the mutation. Null, absent, wrong-identity,
+wrong-version/signature, and exhausted previous-state results remain recoverable
+fail-closed failures. Two clean exact-install lifecycle runs passed consecutively in
+44.687s and 44.640s after this repair.
 
 Immediately after the incremental reinstall, two setup attempts timed out before the
 initial detector-consent screen because an Android `System UI isn't responding`
