@@ -409,6 +409,10 @@ class ProductionGeckoSessionTest {
             clickText(automation, "Close")
             stopBrowserWorker(context)
             open(context, sessionId, server.url("CSFLOAT-CLEANUP"))
+            assertFalse(
+                "Steam content loaded before quarantined extension inspection completed",
+                hasExactText(automation, pageMarker),
+            )
             waitForTextContaining(
                 automation,
                 "CSFloat: quarantine cleared; extension absent; browsing restored.",
