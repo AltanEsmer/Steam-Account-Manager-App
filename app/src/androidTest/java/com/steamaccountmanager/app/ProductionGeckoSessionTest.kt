@@ -35,6 +35,90 @@ import org.junit.runner.RunWith
 class ProductionGeckoSessionTest {
 
     @Test
+    fun productionGeckoBrowserShellTraversesPolicyHistoryRecoveryAndClose() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val runMarker = UUID.randomUUID().toString().replace("-", "")
+        val sessionId = SessionIdentifier("instrumentation-synthetic-shell-$runMarker", "steam")
+        val server = LoopbackFixture(runMarker)
+
+        try {
+            stopBrowserWorker(context)
+            clearSyntheticDetectorConsent(context, sessionId)
+            server.start()
+            BrowserProcessController.openWebsite(
+                context = context,
+                sessionId = sessionId,
+                targetUrl = server.url("SHELL-A"),
+                allowedDomains = listOf(LOOPBACK_HOST),
+            )
+            waitForText(automation, "Allow Steam profile detection?")
+            clickText(automation, "Allow and continue")
+            waitForText(automation, "PROD-GECKO|SHELL-A")
+
+            clickText(automation, "Allowed page")
+            waitForText(automation, "PROD-GECKO|SHELL-B")
+            assertControlEnabled(automation, "Back", true)
+            clickText(automation, "Back")
+            waitForText(automation, "PROD-GECKO|SHELL-A")
+            assertControlEnabled(automation, "Forward", true)
+            clickText(automation, "Forward")
+            waitForText(automation, "PROD-GECKO|SHELL-B")
+            clickText(automation, "Refresh")
+            waitForText(automation, "PROD-GECKO|SHELL-B")
+
+            clickText(automation, "Authentication redirect")
+            waitForText(automation, "PROD-GECKO|AUTH")
+
+            clickText(automation, "Blocked web link")
+            waitForText(automation, "Leaving this website")
+            assertFalse("Blocked dialog disclosed its destination", hasExactText(automation, BLOCKED_URI))
+            clickText(automation, "Stay here")
+            waitForText(automation, "PROD-GECKO|AUTH")
+
+            clickText(automation, "Blocked web link")
+            waitForText(automation, "Leaving this website")
+            clickText(automation, "Open externally")
+            assertTrue("External handoff neither opened an activity nor reported unavailability", waitUntil(UI_TIMEOUT_MS) {
+                automation.rootInActiveWindow?.packageName?.toString()?.let { it != context.packageName } == true ||
+                    hasExactText(automation, "No browser is available to open this link.")
+            })
+            if (automation.rootInActiveWindow?.packageName?.toString() != context.packageName) {
+                assertTrue("Android Back did not return from external handoff", automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+                waitForText(automation, "PROD-GECKO|AUTH")
+            }
+
+            clickText(automation, "Rejected non-web link")
+            SystemClock.sleep(1_000)
+            assertFalse("Rejected non-web navigation offered external handoff", hasExactText(automation, "Leaving this website"))
+            assertEquals(
+                "Rejected non-web navigation left the app",
+                context.packageName,
+                automation.rootInActiveWindow?.packageName?.toString(),
+            )
+            if (hasExactText(automation, REJECTED_NAVIGATION_MESSAGE)) {
+                clickText(automation, "Try again")
+                waitForText(automation, "PROD-GECKO|AUTH")
+            } else {
+                waitForText(automation, "PROD-GECKO|AUTH")
+            }
+
+            clickText(automation, "Recoverable failure")
+            waitForText(automation, "This website could not be reached.")
+            server.allowRecovery()
+            clickText(automation, "Try again")
+            waitForText(automation, "PROD-GECKO|RECOVERED")
+
+            clickText(automation, "Close")
+            waitForTextToDisappear(automation, "PROD-GECKO|RECOVERED")
+        } finally {
+            stopBrowserWorker(context)
+            server.close()
+        }
+    }
+
+    @Test
     fun productionGeckoSessionPersistsIsolatesStopsAndRoutesLatestRequest() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext
@@ -305,6 +389,19 @@ class ProductionGeckoSessionTest {
         })
     }
 
+    private fun assertControlEnabled(
+        automation: android.app.UiAutomation,
+        description: String,
+        expected: Boolean,
+    ) {
+        assertTrue("Control $description did not reach enabled=$expected", waitUntil(UI_TIMEOUT_MS) {
+            val node = findExactText(automation.rootInActiveWindow, description)
+            val matches = node?.isEnabled == expected
+            node?.recycle()
+            matches
+        })
+    }
+
     private fun hasExactText(automation: android.app.UiAutomation, expected: String): Boolean {
         val node = findExactText(automation.rootInActiveWindow, expected)
         node?.recycle()
@@ -335,6 +432,7 @@ class ProductionGeckoSessionTest {
         private val running = AtomicBoolean(false)
         private var server: ServerSocket? = null
         private var worker: Thread? = null
+        private val recoverableFailure = AtomicBoolean(true)
 
         fun start() {
             val socket = ServerSocket(LOOPBACK_PORT, 16, InetAddress.getByName(LOOPBACK_HOST)).apply {
@@ -359,14 +457,33 @@ class ProductionGeckoSessionTest {
             }
         }
 
+        fun allowRecovery() {
+            recoverableFailure.set(false)
+        }
+
         fun url(slot: String) = "http://$LOOPBACK_HOST:$LOOPBACK_PORT/fixture?slot=$slot&run=$runMarker"
 
         private fun respond(client: Socket) {
             client.soTimeout = 2_000
             val reader = BufferedReader(InputStreamReader(client.getInputStream(), StandardCharsets.US_ASCII))
-            reader.readLine() ?: return
+            val request = reader.readLine() ?: return
             while (!reader.readLine().isNullOrEmpty()) Unit
-            val body = fixtureHtml(runMarker).toByteArray(StandardCharsets.UTF_8)
+            if (request.contains(" /auth-redirect?")) {
+                val headers = buildString {
+                    append("HTTP/1.1 302 Found\r\n")
+                    append("Location: /auth?slot=AUTH\r\n")
+                    append("Cache-Control: no-store\r\n")
+                    append("Content-Length: 0\r\n")
+                    append("Connection: close\r\n\r\n")
+                }.toByteArray(StandardCharsets.US_ASCII)
+                client.getOutputStream().apply {
+                    write(headers)
+                    flush()
+                }
+                return
+            }
+            if (request.contains(" /flaky") && recoverableFailure.get()) return
+            val body = fixtureHtml(runMarker, request.contains(" /flaky")).toByteArray(StandardCharsets.UTF_8)
             val headers = buildString {
                 append("HTTP/1.1 200 OK\r\n")
                 append("Content-Type: text/html; charset=utf-8\r\n")
@@ -387,11 +504,18 @@ class ProductionGeckoSessionTest {
             worker?.join(2_000)
         }
 
-        private fun fixtureHtml(run: String) = """
+        private fun fixtureHtml(run: String, recovered: Boolean) = """
             <!doctype html><html><head><meta charset="utf-8"><title>PROD-GECKO|loading</title></head>
-            <body><main id="marker">PROD-GECKO|loading</main><script>
+            <body><main id="marker">PROD-GECKO|loading</main>
+            <nav>
+              <a href="/shell?slot=SHELL-B">Allowed page</a>
+              <a href="/auth-redirect?slot=AUTH">Authentication redirect</a>
+              <a href="$BLOCKED_URI">Blocked web link</a>
+              <a href="mailto:synthetic@example.invalid">Rejected non-web link</a>
+              <a href="/flaky?slot=RECOVERED">Recoverable failure</a>
+            </nav><script>
             (() => {
-              const requested = new URL(location.href).searchParams.get('slot');
+              const requested = ${if (recovered) "'RECOVERED'" else "new URL(location.href).searchParams.get('slot')"};
               const scope = '$run';
               const cookieName = 'prod_' + scope;
               const localKey = 'prod-local-' + scope;
@@ -410,7 +534,7 @@ class ProductionGeckoSessionTest {
                   const local = localStorage.getItem(localKey) || 'missing';
                   const marker = 'PROD-GECKO|requested=' + requested + '|cookie=' + cookie +
                     '|local=' + local + '|idb=' + idb;
-                  document.title = marker;
+                  document.title = /^(SHELL-|AUTH|RECOVERED)/.test(requested) ? 'PROD-GECKO|' + requested : marker;
                   document.getElementById('marker').textContent = marker;
                 };
               };
@@ -424,6 +548,9 @@ class ProductionGeckoSessionTest {
         private const val LOOPBACK_PORT = 38949
         private const val UI_TIMEOUT_MS = 30_000L
         private const val POLL_INTERVAL_MS = 100L
+        private const val BLOCKED_URI = "https://example.invalid/synthetic-blocked"
+        private const val REJECTED_NAVIGATION_MESSAGE =
+            "This link cannot be opened safely. You can stay here and try another link."
         private const val SYNTHETIC_BRIDGE_AVATAR_URL =
             "https://avatars.steamstatic.com/synthetic_bridge_avatar.jpg"
         private const val SYNTHETIC_BRIDGE_PROFILE_ID = "sam-geckoview-synthetic-bridge"
