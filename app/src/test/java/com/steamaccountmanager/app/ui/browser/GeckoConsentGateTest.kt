@@ -3,6 +3,7 @@ package com.steamaccountmanager.app.ui.browser
 import com.steamaccountmanager.app.persistDetectorConsentFailClosed
 import com.steamaccountmanager.app.tryPersistCsfloatQuarantine
 import com.steamaccountmanager.app.isCsfloatQuarantined
+import com.steamaccountmanager.app.ui.browser.csfloatInstallEnabled
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,6 +23,13 @@ class GeckoConsentGateTest {
     fun missingTrustedMarkerDefaultsToQuarantine() {
         assertTrue(isCsfloatQuarantined(trustedMarkerExists = false))
         assertFalse(isCsfloatQuarantined(trustedMarkerExists = true))
+    }
+
+    @Test
+    fun installRemainsDisabledUntilStartupTrustInspectionCompletes() {
+        assertFalse(csfloatInstallEnabled(trustInspectionComplete = false, quarantined = false))
+        assertFalse(csfloatInstallEnabled(trustInspectionComplete = true, quarantined = true))
+        assertTrue(csfloatInstallEnabled(trustInspectionComplete = true, quarantined = false))
     }
 
     @Test
