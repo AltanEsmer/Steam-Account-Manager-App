@@ -322,7 +322,7 @@ class ProductionGeckoSessionTest {
     }
 
     @Test
-    fun productionCsfloatAcceptsAndRemainsIsolatedByBrowserSession() = runBlocking {
+    fun productionCsfloatAcceptsOpensTracksAndRemainsIsolatedByBrowserSession() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext
         val automation = instrumentation.uiAutomation
@@ -346,6 +346,16 @@ class ProductionGeckoSessionTest {
             clickText(automation, "Accept CSFloat access")
             waitForTextContaining(automation, "CSFloat: enabled")
             waitForTextContaining(automation, "Tracking: official action ready")
+            clickText(automation, "Open CSFloat")
+            waitForTextContaining(automation, "Offer Tracking Enabled")
+            SystemClock.sleep(1_000)
+            assertTrue(
+                "Android Back did not close the official CSFloat popup",
+                automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK),
+            )
+            waitForTextContaining(automation, "CSFloat: official popup opened")
+            clickText(automation, "Record visible CSFloat status")
+            waitForTextContaining(automation, "Tracking: active (visible official status recorded)")
 
             BrowserProcessController.openWebsite(context, sessionB, steamListing, listOf("steamcommunity.com"))
             waitForText(automation, "Allow Steam profile detection?")

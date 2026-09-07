@@ -2,6 +2,7 @@ package com.steamaccountmanager.app.browser
 
 import java.io.File
 import java.net.URL
+import java.net.URI
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,6 +15,7 @@ object CsfloatExtensionContract {
     const val SIGNED_STATE = 2
     const val SIZE_BYTES = 7_011_169L
     const val SHA256 = "70C540B8B1DF125596EF615FE37028542DE4D92B3816AD81EB6AD5CE3D11798D"
+    private const val POPUP_PATH = "src/popup.html"
 
     fun isExpected(id: String?, version: String?, signedState: Int): Boolean =
         id == ID && version == VERSION && signedState == SIGNED_STATE
@@ -23,6 +25,15 @@ object CsfloatExtensionContract {
 
     fun canBindAction(id: String?, version: String?, signedState: Int, enabled: Boolean): Boolean =
         enabled && isExpected(id, version, signedState)
+
+    fun officialPopupUri(baseUrl: String?): String? = try {
+        val base = URI(baseUrl ?: return null)
+        if (base.scheme != "moz-extension" || base.host.isNullOrBlank() || base.userInfo != null ||
+            base.query != null || base.fragment != null || base.path != "/"
+        ) null else base.resolve(POPUP_PATH).toString()
+    } catch (_: IllegalArgumentException) {
+        null
+    }
 
     fun prompt(
         name: String?,

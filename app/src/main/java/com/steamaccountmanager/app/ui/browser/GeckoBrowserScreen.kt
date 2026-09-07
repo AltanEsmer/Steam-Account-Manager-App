@@ -77,9 +77,7 @@ fun GeckoBrowserScreen(
     var sessionRef by remember { mutableStateOf<GeckoSession?>(null) }
     var detectorExtensionRef by remember { mutableStateOf<WebExtension?>(null) }
     var csfloatExtensionRef by remember { mutableStateOf<WebExtension?>(null) }
-    var csfloatDefaultAction by remember { mutableStateOf<WebExtension.Action?>(null) }
-    var csfloatSessionAction by remember { mutableStateOf<WebExtension.Action?>(null) }
-    var csfloatAction by remember { mutableStateOf<WebExtension.Action?>(null) }
+    var csfloatPopupUri by remember { mutableStateOf<String?>(null) }
     var csfloatState by remember { mutableStateOf("CSFloat: checking installed state…") }
     var csfloatBusy by remember { mutableStateOf(false) }
     var installPromptText by remember { mutableStateOf<String?>(null) }
@@ -133,21 +131,31 @@ fun GeckoBrowserScreen(
 
     fun clearCsfloat() {
         closePopup()
-        csfloatExtensionRef?.let { extension ->
-            extension.setActionDelegate(null)
-            sessionRef?.webExtensionController?.setActionDelegate(extension, null)
-        }
         csfloatExtensionRef = null
-        csfloatDefaultAction = null
-        csfloatSessionAction = null
-        csfloatAction = null
+        csfloatPopupUri = null
         tracking.unavailable()
         renderTracking()
     }
 
-    fun openPopup(request: Long): GeckoResult<GeckoSession> = try {
+    fun openPopup(request: Long, uri: String) {
+        try {
         closePopup()
-        val popup = GeckoSession().apply { open(requireNotNull(runtimeRef)) }
+        val popup = GeckoSession().apply {
+            progressDelegate = object : GeckoSession.ProgressDelegate {
+                override fun onPageStop(session: GeckoSession, success: Boolean) {
+                    if (session !== popupSession) return
+                    if (success) {
+                        csfloatState = "CSFloat: official popup opened"
+                        tracking.popupOpened(request)
+                    } else {
+                        csfloatState = "CSFloat: official popup failed to load. Retry."
+                        tracking.failed(request)
+                    }
+                    renderTracking()
+                }
+            }
+            open(requireNotNull(runtimeRef))
+        }
         val view = GeckoView(context).apply { setSession(popup) }
         val dialog = Dialog(context).apply {
             setTitle("Official CSFloat popup")
@@ -158,54 +166,13 @@ fun GeckoBrowserScreen(
         popupSession = popup
         popupView = view
         popupDialog = dialog
-        csfloatState = "CSFloat: official popup opened"
-        tracking.popupOpened(request)
-        renderTracking()
-        GeckoResult.fromValue(popup)
+        popup.loadUri(uri)
     } catch (_: RuntimeException) {
         tracking.failed(request)
+        csfloatState = "CSFloat: official popup failed to open. Retry."
         renderTracking()
-        GeckoResult.fromException(IllegalStateException("CSFLOAT_ACTION_FAILED"))
+        closePopup()
     }
-
-    val actionDelegate = remember {
-        object : WebExtension.ActionDelegate {
-            override fun onBrowserAction(extension: WebExtension, callbackSession: GeckoSession?, action: WebExtension.Action) {
-                if (extension !== csfloatExtensionRef ||
-                    !CsfloatExtensionContract.canBindAction(
-                        extension.id,
-                        extension.metaData.version,
-                        extension.metaData.signedState,
-                        extension.metaData.enabled,
-                    ) ||
-                    (callbackSession != null && callbackSession !== sessionRef)
-                ) return
-                if (callbackSession == null) csfloatDefaultAction = action else csfloatSessionAction = action
-                val default = csfloatDefaultAction
-                val session = csfloatSessionAction
-                csfloatAction = if (default != null && session != null) session.withDefault(default) else default
-                if (csfloatAction?.enabled == true) tracking.actionAvailable() else tracking.unavailable()
-                renderTracking()
-            }
-
-            override fun onPageAction(extension: WebExtension, callbackSession: GeckoSession?, action: WebExtension.Action) =
-                onBrowserAction(extension, callbackSession, action)
-
-            override fun onOpenPopup(extension: WebExtension, action: WebExtension.Action): GeckoResult<GeckoSession> {
-                val request = tracking.pendingRequest ?: return GeckoResult.fromValue(null)
-                return openPopup(request)
-            }
-
-            override fun onTogglePopup(extension: WebExtension, action: WebExtension.Action): GeckoResult<GeckoSession> {
-                val request = tracking.pendingRequest ?: return GeckoResult.fromValue(null)
-                return if (popupSession == null) openPopup(request) else {
-                    closePopup()
-                    tracking.popupOpened(request)
-                    renderTracking()
-                    GeckoResult.fromValue(null)
-                }
-            }
-        }
     }
 
     fun bindCsfloat(extension: WebExtension) {
@@ -217,9 +184,14 @@ fun GeckoBrowserScreen(
                 extension.metaData.enabled,
             )
         ) return
+        val popupUri = CsfloatExtensionContract.officialPopupUri(extension.metaData.baseUrl) ?: run {
+            csfloatState = "CSFloat: official popup metadata is invalid. Retry."
+            return
+        }
         csfloatExtensionRef = extension
-        extension.setActionDelegate(actionDelegate)
-        sessionRef?.webExtensionController?.setActionDelegate(extension, actionDelegate)
+        csfloatPopupUri = popupUri
+        tracking.actionAvailable()
+        renderTracking()
         csfloatState = "CSFloat: enabled"
     }
 
@@ -414,18 +386,14 @@ fun GeckoBrowserScreen(
                     }
                     TextButton(
                         onClick = {
-                            val action = csfloatAction ?: return@TextButton
+                            val popupUri = csfloatPopupUri ?: return@TextButton
                             csfloatState = "CSFloat: official action dispatched"
                             tracking.request {
-                                try {
-                                    action.click()
-                                } catch (_: RuntimeException) {
-                                    tracking.failed()
-                                }
+                                openPopup(requireNotNull(tracking.pendingRequest), popupUri)
                             }
                             renderTracking()
                         },
-                        enabled = csfloatAction != null && tracking.pendingRequest == null,
+                        enabled = csfloatPopupUri != null && tracking.pendingRequest == null,
                     ) { Text("Open CSFloat") }
                 }
                 Text(

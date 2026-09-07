@@ -61,6 +61,19 @@ Data collection (1):
     }
 
     @Test
+    fun officialPopupUriAcceptsOnlyAnExtensionOriginRoot() {
+        assertEquals(
+            "moz-extension://installed-csfloat/src/popup.html",
+            CsfloatExtensionContract.officialPopupUri("moz-extension://installed-csfloat/"),
+        )
+        assertEquals(null, CsfloatExtensionContract.officialPopupUri(null))
+        assertEquals(null, CsfloatExtensionContract.officialPopupUri(""))
+        assertEquals(null, CsfloatExtensionContract.officialPopupUri("https://example.invalid/"))
+        assertEquals(null, CsfloatExtensionContract.officialPopupUri("moz-extension://installed/other/"))
+        assertEquals(null, CsfloatExtensionContract.officialPopupUri("moz-extension://installed/?redirect=evil"))
+    }
+
+    @Test
     fun trackingRequiresCurrentPopupAndVisibleOfficialStatus() {
         val tracking = CsfloatTracking()
         tracking.actionAvailable()
