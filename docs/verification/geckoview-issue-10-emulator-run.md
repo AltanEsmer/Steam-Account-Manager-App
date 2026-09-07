@@ -1,20 +1,20 @@
 # Issue #10 production CSFloat verification receipt
 
-Status: **Machine/emulator verification PASS at application/test source `4473769`**
+Status: **Machine/emulator verification PASS at application/test source `d98eedb`**
 
 ## Exact candidate
 
-- Application/test source: `447376979d35f53863618fc3dd5ca6f13e451d8b`
+- Application/test source: `d98eedbe780e2af8fb4463b82c0c445c8fa68dde`
 - Starting checkpoint: `31f9fadbf16dd3aa1defc4c4aff132def1f738f7`
 - Branch: `codex/geckoview-campaign`
 - Variant: debug
 - Preserved evidence directory:
-  `C:\Users\esmer\AppData\Local\Temp\sam-gv10-4473769`
-- `app-debug.apk`: 599,024,761 bytes; SHA-256
-  `F440EFC3E73FB0904C624FDCAE669F1F08A6D865DC71DB43BF25183BBA26E544`
-- `app-debug-androidTest.apk`: 2,296,758 bytes; SHA-256
-  `95D269A90DBCFC16067081974D28F3ECBA93CF0681DB4434832449A37BB16F7D`
-- Verification completed: 2026-09-07 11:53 CEST
+  `C:\Users\esmer\AppData\Local\Temp\sam-gv10-d98eedb`
+- `app-debug.apk`: 599,057,529 bytes; SHA-256
+  `4B89A78862BE64AAEEAC0692117BA2D7F2B1A036E05482FDBCCB5939BB63BF5B`
+- `app-debug-androidTest.apk`: 2,300,722 bytes; SHA-256
+  `05353B4021878C049FA68904EEAD3A722DA5C27B22A1F72219A4B5403D3845CD`
+- Verification completed: 2026-09-07 13:07 CEST
 
 ## Approved extension artifact
 
@@ -44,11 +44,12 @@ ordinary browsing usable. Acceptance installs the verified official package, and
 the browser exposes the official signed popup without fabricating a Firefox-only
 Steam permission prompt.
 
-Install, disabled, update-policy, action-ready, record-ready, active, and failure
-states are visible. Failed install/action operations remain retryable and retain
-external-browser recovery. Tracking becomes active only after the official popup
-loads and the user records its visible status. Extension state remains in the
-approved isolated Gecko runtime for the selected `(account, website)` session.
+Install, disabled, update-policy, popup-available, popup-opened, and failure states
+are visible. Failed install/popup and cleanup operations remain retryable and retain
+external-browser recovery. The app does not infer or self-record live tracking; it
+directs the user to inspect tracking status inside the official popup. Extension
+state remains in the approved isolated Gecko runtime for the selected
+`(account, website)` session.
 
 The official Manifest V3 package declares `src/popup.html` as its action popup. The
 browser derives the popup URL only from GeckoView's enabled extension object,
@@ -76,10 +77,12 @@ installer was used for the main APK; the small test APK used streamed install.
 The behavioral contract commit `58217a2` was genuinely red: the focused unit
 command failed to compile because `CsfloatExtensionContract` did not exist. The
 subsequent feature and bounded repair commits made the contract and public-behavior
-journeys pass. The repairs preserve truthful action/recovery state and load the
-verified official popup through a normal GeckoSession.
+journeys pass. Review then rejected the app's unsupported action/active wording and
+fire-and-forget cleanup. Commit `6b147c9` added a genuinely red truthful-popup
+contract; `6e9a1a5` removed the app-owned tracking assertion; `8331f10` made cleanup
+fail closed; and `d98eedb` removed stale tracking claims from proof names.
 
-The fresh unit/build/lint command at exact source `4473769` was:
+The fresh unit/build/lint command at exact source `d98eedb` was:
 
 ```powershell
 $env:ANDROID_HOME = 'C:\Users\esmer\AppData\Local\Android\Sdk'
@@ -87,12 +90,12 @@ $env:ANDROID_SERIAL = 'emulator-5580'
 .\gradlew.bat '-Dorg.gradle.java.home=C:/Program Files/Android/Android Studio/jbr' testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug lintRelease --rerun-tasks --console=plain
 ```
 
-Exit 0. All 66 unit tests passed with zero failures, errors, or skips. Debug and
-Android-test APK assembly passed. Debug lint reported 121 warnings and zero errors;
-release lint reported 53 warnings and zero errors. The result XML files are under
+Exit 0 in 1 minute 2 seconds; all 103 tasks executed. All 67 unit tests passed with
+zero failures, errors, or skips. Debug and Android-test APK assembly passed. Debug
+lint reported 123 warnings and zero errors; release lint reported 55 warnings and
+zero errors. The result XML files are under
 `app\build\test-results\testDebugUnitTest`, while lint XML is under
-`app\build\reports`. An immediate exact-task confirmation also exited 0 with 103
-actionable tasks (2 executed, 101 up-to-date).
+`app\build\reports`.
 
 The exact APK install commands were:
 
@@ -102,8 +105,13 @@ $adb = 'C:\Users\esmer\AppData\Local\Android\Sdk\platform-tools\adb.exe'
 & $adb -s emulator-5580 install -r -t app\build\outputs\apk\androidTest\debug\app-debug-androidTest.apk
 ```
 
-Both exited 0. The incremental main install completed successfully in 3,775 ms;
-the streamed test install also reported `Success`.
+The dedicated AVD initially rejected an incremental replacement because only about
+one GB was free. After verifying the exact package names, only the campaign-owned
+debug and test packages were uninstalled; both removals exited 0. The exact main
+APK then installed incrementally and the test APK installed by streaming, both with
+exit 0. The final `d98eedb` commit changes test names only: its rebuilt main APK was
+byte-identical to the already installed main APK, and its rebuilt test APK was
+streamed again successfully before the final run.
 
 The final full emulator command was:
 
@@ -111,13 +119,15 @@ The final full emulator command was:
 & $adb -s emulator-5580 shell am instrument -w -r com.steamaccountmanager.app.debug.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-Exit 0; 31/31 tests passed in 290.281 seconds. The runner exercised the complete
-production CSFloat denial and acceptance paths, official-popup rendering, visible
-status recording, tracking transition, A-enabled/B-absent/A-enabled isolation,
-ordinary browsing after denial, external recovery, production browser navigation,
-process lifecycle, persistence, detector boundaries, and all earlier prototype
-regressions. Accessibility assertions observed the real official popup label
-`Offer Tracking Enabled`; no visible behavior is inferred from logs alone.
+Exit 0; 32/32 tests passed in 309.605 seconds. The runner exercised the complete
+production CSFloat denial and acceptance paths; official-popup rendering;
+popup-failure/retry; cleanup-failure, immediate safe blanking, retry, and
+list-confirmed absence; A-enabled/B-absent/A-enabled isolation; ordinary browsing
+after denial; external recovery; production browser navigation; process lifecycle;
+persistence; detector boundaries; and all earlier prototype regressions.
+Accessibility assertions observed the real official popup label `Offer Tracking
+Enabled`. That label proves required permission in this artifact, not a live
+tracking update, and the app does not claim otherwise.
 
 After the run, the app and test packages were force-stopped and `pidof` returned no
 app-owned main, Gecko, or Gecko-child process. `git diff --check` passed and the
@@ -134,12 +144,20 @@ tracked worktree was clean at the application/test source checkpoint.
   no Chromium-style optional Steam prompt is shown or simulated.
 - The popup destination cannot come from website content or user input. It is built
   from the enabled, exact-ID signed extension base and the reviewed manifest path.
+- Rejected-package cleanup immediately blanks the embedded session, waits for
+  uninstall completion, reinspects installed state, and restores browsing only
+  after confirming absence. Failure stays blank and popup-unavailable with explicit
+  cleanup retry and the prior safe HTTP(S) destination preserved for external use.
+- The deterministic popup/cleanup failure controls exist only in debuggable builds;
+  they exercise the production recovery paths and are absent from release builds.
 - State is not shared with another `(account, website)` runtime. The emulator test
   proves A/B separation through the production process/profile topology.
 - No credentials, Steam Guard codes, QR payloads, cookies/tokens, account IDs,
   trades, payment data, browser storage, or authentication screenshots were
   requested, captured, logged, committed, or uploaded.
 - The API-36 x86_64 emulator proves the automated production flow with synthetic
-  public fixtures. It does not prove a real Steam authentication session, every
-  vendor device, future CSFloat versions, or packages other than the exact approved
-  CSFloat artifact. Other extensions remain outside issue #10 and this campaign.
+  public fixtures. It does not prove a real Steam authentication session, live or
+  long-duration tracking, every vendor device, future CSFloat versions, or packages
+  other than the exact approved CSFloat artifact. Issue #7's official GO records
+  the separate authenticated live tracking proof. Other extensions remain outside
+  issue #10 and this campaign.
