@@ -111,7 +111,7 @@ Data collection (1):
     }
 
     @Test
-    fun trackingFailureRecoversWithoutAcceptingStaleCallbacks() {
+    fun popupFailureRecoversWithoutAcceptingStaleCallbacks() {
         val popup = CsfloatPopupStatus()
         popup.available()
         val failedRequest = popup.requestOpen {}

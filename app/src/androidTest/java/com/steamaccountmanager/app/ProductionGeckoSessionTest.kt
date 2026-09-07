@@ -371,7 +371,7 @@ class ProductionGeckoSessionTest {
     }
 
     @Test
-    fun productionCsfloatAcceptsOpensTracksAndRemainsIsolatedByBrowserSession() = runBlocking {
+    fun productionCsfloatAcceptsOpensPopupAndRemainsIsolatedByBrowserSession() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext
         val automation = instrumentation.uiAutomation
