@@ -1,20 +1,20 @@
 # Issue #10 production CSFloat verification receipt
 
-Status: **Machine/emulator verification PASS at application/test source `a07a64e`**
+Status: **Machine/emulator verification PASS at application/test source `e4ee283`**
 
 ## Exact candidate
 
-- Application/test source: `a07a64eae8cf0f2b76a71c54facee88adaf8d0df`
+- Application/test source: `e4ee283c4d65347056e7732b103ef6d8aa3fd45a`
 - Starting checkpoint: `31f9fadbf16dd3aa1defc4c4aff132def1f738f7`
 - Branch: `codex/geckoview-campaign`
 - Variant: debug
 - Preserved evidence directory:
   `C:\Users\esmer\AppData\Local\Temp\sam-gv10-a07a64e`
-- `app-debug.apk`: 599,073,913 bytes; SHA-256
-  `5EEE5DA430B26156278C2D34796B05493861E3E40D34235C57CC7C93E4E3F1F2`
-- `app-debug-androidTest.apk`: 2,304,982 bytes; SHA-256
-  `0297505C9AED14E4EF9C9A8CF4C3F8B36032B18B185881E0F13EC1B821AD3C23`
-- Verification completed: 2026-09-07 15:55 CEST
+- `app-debug.apk`: 599,546,814 bytes; SHA-256
+  `524CAF9B1B8B19994F62A563CC1C7A9B1DD74D25A89E767A6E6446BC051BA038`
+- `app-debug-androidTest.apk`: 2,402,787 bytes; SHA-256
+  `1E65AAC94F6646C36D0932B32F92BE05BDFAB03AB2093AD5369F258D48978680`
+- Verification completed: 2026-09-07 16:25 CEST
 
 ## Approved extension artifact
 
@@ -155,6 +155,14 @@ persistence; detector boundaries; and all earlier prototype regressions.
 Accessibility assertions observed the real official popup label `Offer Tracking
 Enabled`. That label proves required permission in this artifact, not a live
 tracking update, and the app does not claim otherwise.
+
+The focused issue #10 transition proof at `e4ee283` first observed CSFloat absent,
+the popup unavailable, and its open control disabled. After explicit acceptance of
+the callback-derived install prompt, it observed the exact signed package enabled,
+the official popup available and opened, and the genuine popup label `Offer Tracking
+Enabled`. The three focused production journeys passed 3/3 in 55.048 seconds on
+`emulator-5580`. This is the approved Firefox public-state transition; it is not a
+Chromium optional-permission toggle and does not claim a live tracking update.
 
 After the run, the app and test packages were force-stopped and `pidof` returned no
 app-owned main, Gecko, or Gecko-child process. `git diff --check` passed and the
