@@ -102,6 +102,7 @@ fun GeckoBrowserScreen(
     var failNextPopupForTest by remember { mutableStateOf(false) }
     var failNextCleanupForTest by remember { mutableStateOf(false) }
     var failNextDeniedVerificationForTest by remember { mutableStateOf(false) }
+    var trustAcceptedInstall by remember { mutableStateOf(false) }
     var pendingDeniedVerification by remember { mutableStateOf(false) }
     var pendingCleanup by remember { mutableStateOf<List<WebExtension>>(emptyList()) }
     var pendingCleanupSuccess by remember { mutableStateOf("") }
@@ -363,6 +364,17 @@ fun GeckoBrowserScreen(
                             maybeLoadInitialPage()
                         }
                     }
+                    csfloatQuarantined && trustAcceptedInstall -> {
+                        trustAcceptedInstall = false
+                        if (clearQuarantineAndRestore()) {
+                            bindCsfloat(exact)
+                        } else {
+                            cleanupCsfloat(
+                                listOf(exact),
+                                "CSFloat: untrusted installation removed; browsing restored.",
+                            )
+                        }
+                    }
                     csfloatQuarantined -> cleanupCsfloat(
                         listOf(exact),
                         "CSFloat: quarantine cleared; extension absent; browsing restored.",
@@ -437,8 +449,10 @@ fun GeckoBrowserScreen(
 
     fun installCsfloat() {
         if (csfloatBusy) return
+        if (!quarantine()) return
         csfloatBusy = true
         installDenied = false
+        trustAcceptedInstall = false
         csfloatState = "CSFloat: installing verified package…"
         scope.launch {
             try {
@@ -460,13 +474,14 @@ fun GeckoBrowserScreen(
                                 extension.metaData.signedState,
                             )
                         ) {
-                            sessionRef?.reload()
+                            trustAcceptedInstall = true
                             csfloatState = "CSFloat: installed; discovering official popup…"
                             discoverCsfloat()
                         } else {
                             if (extension == null) {
                                 clearCsfloat()
                                 csfloatState = "CSFloat: install returned no package. Retry; browsing remains available."
+                                discoverCsfloat()
                             } else {
                                 cleanupCsfloat(
                                     listOf(extension),
@@ -485,6 +500,7 @@ fun GeckoBrowserScreen(
                             clearCsfloat()
                             csfloatState =
                                 "CSFloat: install failed. Check the network and retry; browsing remains available."
+                            discoverCsfloat()
                         }
                     },
                 )
@@ -493,6 +509,7 @@ fun GeckoBrowserScreen(
                 tempXpi = null
                 csfloatBusy = false
                 csfloatState = "CSFloat: download verification failed. Check the network and retry."
+                discoverCsfloat()
             }
         }
     }

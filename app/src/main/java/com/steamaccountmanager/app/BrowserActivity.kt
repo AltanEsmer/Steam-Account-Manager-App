@@ -82,8 +82,8 @@ class BrowserActivity : ComponentActivity() {
 
         val consentPreferences = getSharedPreferences(DETECTOR_CONSENT_PREFERENCES, MODE_PRIVATE)
         val showDetectorConsent = !consentPreferences.getBoolean(detectorConsentKey(profileId), false)
-        val quarantineMarker = File(profile, CSFLOAT_QUARANTINE_MARKER)
-        val initialQuarantine = quarantineMarker.isFile
+        val trustedMarker = File(profile, CSFLOAT_TRUSTED_MARKER)
+        val initialQuarantine = isCsfloatQuarantined(trustedMarker.isFile)
 
         super.onCreate(savedInstanceState)
         setContent {
@@ -99,9 +99,9 @@ class BrowserActivity : ComponentActivity() {
                     persistCsfloatQuarantine = { active ->
                         tryPersistCsfloatQuarantine {
                             if (active) {
-                                quarantineMarker.isFile || quarantineMarker.createNewFile()
+                                !trustedMarker.exists() || trustedMarker.delete()
                             } else {
-                                !quarantineMarker.exists() || quarantineMarker.delete()
+                                trustedMarker.isFile || trustedMarker.createNewFile()
                             }
                         }
                     },
@@ -151,7 +151,7 @@ class BrowserActivity : ComponentActivity() {
         private const val GECKO_PROFILE_ROOT = "gecko-browser-profiles"
         internal const val DETECTOR_CONSENT_PREFERENCES = "gecko_detector_consent"
         private const val DETECTOR_CONSENT_VERSION = "steam_profile_detector_consent_v2_"
-        private const val CSFLOAT_QUARANTINE_MARKER = ".csfloat-quarantine"
+        private const val CSFLOAT_TRUSTED_MARKER = ".csfloat-trusted"
 
         internal fun detectorConsentKey(profileId: String) = DETECTOR_CONSENT_VERSION + profileId
 
@@ -190,6 +190,8 @@ internal fun tryPersistCsfloatQuarantine(persist: () -> Boolean): Boolean = try 
 } catch (_: RuntimeException) {
     false
 }
+
+internal fun isCsfloatQuarantined(trustedMarkerExists: Boolean) = !trustedMarkerExists
 
 internal fun persistDetectorConsentFailClosed(
     persist: () -> Boolean,

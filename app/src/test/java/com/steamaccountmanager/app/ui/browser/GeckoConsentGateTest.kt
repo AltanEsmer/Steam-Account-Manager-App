@@ -2,6 +2,7 @@ package com.steamaccountmanager.app.ui.browser
 
 import com.steamaccountmanager.app.persistDetectorConsentFailClosed
 import com.steamaccountmanager.app.tryPersistCsfloatQuarantine
+import com.steamaccountmanager.app.isCsfloatQuarantined
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -13,6 +14,12 @@ class GeckoConsentGateTest {
     fun failedOrThrowingQuarantinePersistenceStaysClosed() {
         assertFalse(tryPersistCsfloatQuarantine { false })
         assertFalse(tryPersistCsfloatQuarantine { throw IllegalStateException("synthetic failure") })
+    }
+
+    @Test
+    fun missingTrustedMarkerDefaultsToQuarantine() {
+        assertTrue(isCsfloatQuarantined(trustedMarkerExists = false))
+        assertFalse(isCsfloatQuarantined(trustedMarkerExists = true))
     }
 
     @Test
