@@ -84,10 +84,12 @@ fun GeckoBrowserScreen(
     }
     var sessionRef by remember { mutableStateOf<GeckoSession?>(null) }
     var detectorExtensionRef by remember { mutableStateOf<WebExtension?>(null) }
+    var installedCsfloatRef by remember { mutableStateOf<WebExtension?>(null) }
     var csfloatExtensionRef by remember { mutableStateOf<WebExtension?>(null) }
     var csfloatPopupUri by remember { mutableStateOf<String?>(null) }
     var csfloatState by remember { mutableStateOf("CSFloat: checking installed state…") }
     var csfloatBusy by remember { mutableStateOf(false) }
+    var mutationGeneration by remember { mutableStateOf(0L) }
     var installPromptText by remember { mutableStateOf<String?>(null) }
     var installPromptResult by remember { mutableStateOf<GeckoResult<WebExtension.PermissionPromptResponse>?>(null) }
     var installAllowsDataCollection by remember { mutableStateOf(false) }
@@ -263,10 +265,11 @@ fun GeckoBrowserScreen(
             return
         }
         csfloatExtensionRef = extension
+        installedCsfloatRef = extension
         csfloatPopupUri = popupUri
         popupStatus.available()
         renderPopupStatus()
-        csfloatState = "CSFloat: enabled"
+        csfloatState = "CSFloat: enabled (${extension.metaData.version}, signed)"
     }
 
     fun cleanupCsfloat(targets: List<WebExtension>, successMessage: String) {
@@ -291,6 +294,7 @@ fun GeckoBrowserScreen(
                     if (installed == null || installed.any { it.id in rejectedIds }) {
                         cleanupFailed()
                     } else {
+                        installedCsfloatRef = null
                         pendingCleanup = emptyList()
                         pendingCleanupSuccess = ""
                         if (clearQuarantineAndRestore()) {
@@ -347,6 +351,7 @@ fun GeckoBrowserScreen(
                     }
                     exact == null -> {
                         clearCsfloat()
+                        installedCsfloatRef = null
                         trustInspectionComplete = true
                         if (csfloatQuarantined) {
                             if (clearQuarantineAndRestore()) {
@@ -363,17 +368,18 @@ fun GeckoBrowserScreen(
                     }
                     !exact.metaData.enabled -> {
                         clearCsfloat()
+                        installedCsfloatRef = exact
                         trustInspectionComplete = true
                         if (csfloatQuarantined) {
                             if (clearQuarantineAndRestore()) {
-                                csfloatState = "CSFloat: quarantine cleared; extension disabled; browsing restored."
+                                csfloatState = "CSFloat: disabled (${exact.metaData.version}, signed); browsing restored."
                             } else {
                                 quarantineRestoreFailed(
                                     "CSFloat: extension is disabled but quarantine clearance failed. Access remains closed; retry inspection.",
                                 )
                             }
                         } else {
-                            csfloatState = "CSFloat: denied or disabled"
+                            csfloatState = "CSFloat: disabled (${exact.metaData.version}, signed)"
                             maybeLoadInitialPage()
                         }
                     }
@@ -406,6 +412,61 @@ fun GeckoBrowserScreen(
                 csfloatState = "CSFloat: failed to inspect installed state. Retry."
                 if (!trustInspectionComplete || csfloatQuarantined) quarantine()
             },
+        )
+    }
+
+    fun mutateCsfloat(enable: Boolean) {
+        if (csfloatBusy) return
+        val target = installedCsfloatRef ?: return
+        if (!quarantine()) return
+        val generation = ++mutationGeneration
+        csfloatBusy = true
+        clearCsfloat()
+        csfloatState = "CSFloat: ${if (enable) "enabling" else "disabling"} verified package…"
+        val controller = requireNotNull(runtimeRef).webExtensionController
+
+        fun failed() {
+            if (generation != mutationGeneration) return
+            csfloatBusy = false
+            popupStatus.discoveryFailed()
+            renderPopupStatus()
+            csfloatState = "CSFloat: ${if (enable) "enable" else "disable"} failed; access remains closed. Retry."
+        }
+
+        val operation = if (enable) {
+            controller.enable(target, WebExtensionController.EnableSource.APP)
+        } else {
+            controller.disable(target, WebExtensionController.EnableSource.APP)
+        }
+        operation.accept(
+            {
+                if (generation != mutationGeneration) return@accept
+                controller.list().accept(
+                    success@{ extensions ->
+                        if (generation != mutationGeneration) return@success
+                        val exact = extensions?.singleOrNull {
+                            CsfloatExtensionContract.isExpected(it.id, it.metaData.version, it.metaData.signedState)
+                        }
+                        if (exact == null || exact.metaData.enabled != enable) {
+                            failed()
+                            return@success
+                        }
+                        installedCsfloatRef = exact
+                        csfloatBusy = false
+                        if (!clearQuarantineAndRestore()) {
+                            failed()
+                        } else if (enable) {
+                            bindCsfloat(exact)
+                        } else {
+                            clearCsfloat()
+                            installedCsfloatRef = exact
+                            csfloatState = "CSFloat: disabled (${exact.metaData.version}, signed); browsing restored."
+                        }
+                    },
+                    { failed() },
+                )
+            },
+            { failed() },
         )
     }
 
@@ -672,6 +733,23 @@ fun GeckoBrowserScreen(
                         enabled = csfloatPopupUri != null && popupStatus.pendingRequest == null,
                     ) { Text("Open CSFloat") }
                 }
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                    val installed = installedCsfloatRef
+                    if (installed != null) {
+                        TextButton(
+                            onClick = { mutateCsfloat(enable = !installed.metaData.enabled) },
+                            enabled = !csfloatBusy && !csfloatQuarantined &&
+                                pendingCleanup.isEmpty() && !pendingDeniedVerification,
+                        ) {
+                            Text(if (installed.metaData.enabled) "Disable CSFloat" else "Enable CSFloat")
+                        }
+                        TextButton(
+                            onClick = { cleanupCsfloat(listOf(installed), "CSFloat: absent; browsing restored.") },
+                            enabled = !csfloatBusy && !csfloatQuarantined &&
+                                pendingCleanup.isEmpty() && !pendingDeniedVerification,
+                        ) { Text("Uninstall CSFloat") }
+                    }
+                }
                 Text(
                     when (popupState) {
                         CsfloatPopupState.UNAVAILABLE -> "CSFloat popup: unavailable"
@@ -690,6 +768,10 @@ fun GeckoBrowserScreen(
                         }
                     }
                     if (debugBuild && popupState == CsfloatPopupState.AVAILABLE) {
+                        TextButton(onClick = {
+                            val extension = installedCsfloatRef ?: return@TextButton
+                            promptDelegate.onUpdatePrompt(extension, emptyArray(), emptyArray(), emptyArray())
+                        }) { Text("Test pinned CSFloat update") }
                         TextButton(onClick = { failNextPopupForTest = true }) {
                             Text("Test CSFloat popup failure")
                         }
@@ -874,6 +956,7 @@ fun GeckoBrowserScreen(
                     geckoView
                 },
                 onRelease = { view ->
+                    mutationGeneration += 1
                     installPromptResult?.complete(WebExtension.PermissionPromptResponse(false, false, false))
                     installPromptResult = null
                     installPromptText = null
