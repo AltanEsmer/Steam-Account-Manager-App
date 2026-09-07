@@ -98,6 +98,9 @@ class BrowserActivity : ComponentActivity() {
                     showDetectorConsent = showDetectorConsent,
                     initialCsfloatQuarantine = initialQuarantine,
                     initialCsfloatRestorationPending = pendingRestorationMarker.isFile,
+                    claimCsfloatOperation = { claimCsfloatOperation(profileId) },
+                    ownsCsfloatOperation = { token -> ownsCsfloatOperation(profileId, token) },
+                    releaseCsfloatOperation = { token -> releaseCsfloatOperation(profileId, token) },
                     persistCsfloatQuarantine = { active ->
                         tryPersistCsfloatQuarantine {
                             if (active) {
@@ -170,6 +173,23 @@ class BrowserActivity : ComponentActivity() {
         private var sharedRuntime: GeckoRuntime? = null
         private var sharedProfileId: String? = null
         private var shutdownRequested = false
+        private var csfloatOperationProfileId: String? = null
+        private var csfloatOperationToken = 0L
+
+        @Synchronized
+        private fun claimCsfloatOperation(profileId: String): Long {
+            csfloatOperationProfileId = profileId
+            return ++csfloatOperationToken
+        }
+
+        @Synchronized
+        private fun ownsCsfloatOperation(profileId: String, token: Long) =
+            csfloatOperationProfileId == profileId && csfloatOperationToken == token
+
+        @Synchronized
+        private fun releaseCsfloatOperation(profileId: String, token: Long) {
+            if (ownsCsfloatOperation(profileId, token)) ++csfloatOperationToken
+        }
 
         /** Called inside `:browser`; Gecko gets a graceful profile flush before process death. */
         fun shutdownBrowserProcess() {
