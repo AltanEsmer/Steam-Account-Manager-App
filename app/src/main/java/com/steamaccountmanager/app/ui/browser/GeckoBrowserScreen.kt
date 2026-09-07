@@ -917,13 +917,15 @@ fun GeckoBrowserScreen(
                                     } else {
                                         controller.update(extension).accept(
                                             { updated ->
-                                                if (ownsOperation(generation) && CsfloatExtensionContract.isExpected(
+                                                if (!ownsOperation(generation)) Unit
+                                                else if (updated == null) verifyControllerAttempt()
+                                                else if (CsfloatExtensionContract.isExpected(
                                                         updated.id,
                                                         updated.metaData.version,
                                                         updated.metaData.signedState,
                                                     ) && updated.metaData.enabled
                                                 ) verifyControllerAttempt()
-                                                else if (ownsOperation(generation)) {
+                                                else {
                                                     quarantine()
                                                     updateTestState =
                                                         "CSFloat update test failed: controller returned changed metadata; access closed."
