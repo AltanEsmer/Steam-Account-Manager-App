@@ -608,7 +608,15 @@ class ProductionGeckoSessionTest {
     ) {
         assertTrue("Control $description did not reach enabled=$expected", waitUntil(UI_TIMEOUT_MS) {
             val node = findExactText(automation.rootInActiveWindow, description)
-            val matches = node?.isEnabled == expected
+            var current = node
+            var enabled = true
+            while (current != null) {
+                enabled = enabled && current.isEnabled
+                val parent = current.parent
+                if (current !== node) current.recycle()
+                current = parent
+            }
+            val matches = node != null && enabled == expected
             node?.recycle()
             matches
         })
