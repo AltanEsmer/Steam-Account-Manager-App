@@ -82,15 +82,8 @@ class BrowserActivity : ComponentActivity() {
 
         val consentPreferences = getSharedPreferences(DETECTOR_CONSENT_PREFERENCES, MODE_PRIVATE)
         val showDetectorConsent = !consentPreferences.getBoolean(detectorConsentKey(profileId), false)
-        val quarantinePreferences = getSharedPreferences(CSFLOAT_QUARANTINE_PREFERENCES, MODE_PRIVATE)
-        val quarantineKey = csfloatQuarantineKey(profileId)
-        val recoveryKey = csfloatRecoveryKey(profileId)
-        val initialQuarantine = quarantinePreferences.getBoolean(quarantineKey, false)
-        val quarantineRecoveryUrl = if (initialQuarantine) {
-            quarantinePreferences.getString(recoveryKey, startUrl) ?: startUrl
-        } else {
-            startUrl
-        }
+        val quarantineMarker = File(profile, CSFLOAT_QUARANTINE_MARKER)
+        val initialQuarantine = quarantineMarker.isFile
 
         super.onCreate(savedInstanceState)
         setContent {
@@ -103,12 +96,14 @@ class BrowserActivity : ComponentActivity() {
                     allowedDomains = allowedDomains,
                     showDetectorConsent = showDetectorConsent,
                     initialCsfloatQuarantine = initialQuarantine,
-                    quarantineRecoveryUrl = quarantineRecoveryUrl,
-                    persistCsfloatQuarantine = { active, recoveryUrl ->
-                        quarantinePreferences.edit()
-                            .putBoolean(quarantineKey, active)
-                            .putString(recoveryKey, recoveryUrl)
-                            .commit()
+                    persistCsfloatQuarantine = { active ->
+                        tryPersistCsfloatQuarantine {
+                            if (active) {
+                                quarantineMarker.isFile || quarantineMarker.createNewFile()
+                            } else {
+                                !quarantineMarker.exists() || quarantineMarker.delete()
+                            }
+                        }
                     },
                     persistDetectorConsent = {
                         val consentKey = detectorConsentKey(profileId)
@@ -155,14 +150,10 @@ class BrowserActivity : ComponentActivity() {
         private const val STEAM_WEBSITE_ID = "steam"
         private const val GECKO_PROFILE_ROOT = "gecko-browser-profiles"
         internal const val DETECTOR_CONSENT_PREFERENCES = "gecko_detector_consent"
-        internal const val CSFLOAT_QUARANTINE_PREFERENCES = "gecko_csfloat_quarantine"
         private const val DETECTOR_CONSENT_VERSION = "steam_profile_detector_consent_v2_"
-        private const val CSFLOAT_QUARANTINE_VERSION = "csfloat_quarantine_v1_"
-        private const val CSFLOAT_RECOVERY_VERSION = "csfloat_recovery_v1_"
+        private const val CSFLOAT_QUARANTINE_MARKER = ".csfloat-quarantine"
 
         internal fun detectorConsentKey(profileId: String) = DETECTOR_CONSENT_VERSION + profileId
-        internal fun csfloatQuarantineKey(profileId: String) = CSFLOAT_QUARANTINE_VERSION + profileId
-        internal fun csfloatRecoveryKey(profileId: String) = CSFLOAT_RECOVERY_VERSION + profileId
 
         private var sharedRuntime: GeckoRuntime? = null
         private var sharedProfileId: String? = null
@@ -192,6 +183,12 @@ class BrowserActivity : ComponentActivity() {
             }
         }
     }
+}
+
+internal fun tryPersistCsfloatQuarantine(persist: () -> Boolean): Boolean = try {
+    persist()
+} catch (_: RuntimeException) {
+    false
 }
 
 internal fun persistDetectorConsentFailClosed(

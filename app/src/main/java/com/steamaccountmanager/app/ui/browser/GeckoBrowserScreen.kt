@@ -70,8 +70,7 @@ fun GeckoBrowserScreen(
     allowedDomains: List<String>,
     showDetectorConsent: Boolean,
     initialCsfloatQuarantine: Boolean,
-    quarantineRecoveryUrl: String,
-    persistCsfloatQuarantine: (Boolean, String) -> Boolean,
+    persistCsfloatQuarantine: (Boolean) -> Boolean,
     persistDetectorConsent: () -> Boolean,
     onClose: () -> Unit,
 ) {
@@ -108,7 +107,7 @@ fun GeckoBrowserScreen(
     var pendingCleanupSuccess by remember { mutableStateOf("") }
     var runtimeRef: GeckoRuntime? = null
     var currentUrl by remember { mutableStateOf(startUrl) }
-    var safeRecoveryUrl by remember { mutableStateOf(quarantineRecoveryUrl) }
+    var safeRecoveryUrl by remember { mutableStateOf(startUrl) }
     var cleanupBlanking by remember { mutableStateOf(false) }
     var csfloatQuarantined by remember { mutableStateOf(initialCsfloatQuarantine) }
     var trustInspectionComplete by remember { mutableStateOf(false) }
@@ -148,15 +147,27 @@ fun GeckoBrowserScreen(
         }
     }
 
-    fun quarantine() {
+    fun persistQuarantine(active: Boolean): Boolean = try {
+        persistCsfloatQuarantine(active)
+    } catch (_: RuntimeException) {
+        false
+    }
+
+    fun quarantine(): Boolean {
         csfloatQuarantined = true
-        persistCsfloatQuarantine(true, safeRecoveryUrl)
         cleanupBlanking = true
         sessionRef?.loadUri("about:blank")
+        return persistQuarantine(true).also { persisted ->
+            if (!persisted) {
+                popupStatus.discoveryFailed()
+                renderPopupStatus()
+                csfloatState = "CSFloat: quarantine storage failed. Access remains closed; retry."
+            }
+        }
     }
 
     fun clearQuarantineAndRestore(): Boolean {
-        if (!persistCsfloatQuarantine(false, safeRecoveryUrl)) return false
+        if (!persistQuarantine(false)) return false
         csfloatQuarantined = false
         trustInspectionComplete = true
         val wasLoaded = initialPageLoaded
@@ -252,9 +263,9 @@ fun GeckoBrowserScreen(
 
     fun cleanupCsfloat(targets: List<WebExtension>, successMessage: String) {
         clearCsfloat()
-        quarantine()
         pendingCleanup = targets
         pendingCleanupSuccess = successMessage
+        if (!quarantine()) return
         val controller = requireNotNull(runtimeRef).webExtensionController
         val rejectedIds = targets.map { it.id }.toSet()
 
@@ -306,7 +317,15 @@ fun GeckoBrowserScreen(
 
     fun discoverCsfloat() {
         requireNotNull(runtimeRef).webExtensionController.list().accept(
-            { extensions ->
+            success@{ extensions ->
+                if (extensions == null) {
+                    clearCsfloat()
+                    popupStatus.discoveryFailed()
+                    renderPopupStatus()
+                    csfloatState = "CSFloat: failed to inspect installed state. Retry."
+                    quarantine()
+                    return@success
+                }
                 val byId = extensions.orEmpty().filter { it.id == CsfloatExtensionContract.ID }
                 val exact = byId.singleOrNull {
                     CsfloatExtensionContract.isExpected(it.id, it.metaData.version, it.metaData.signedState)
@@ -366,7 +385,8 @@ fun GeckoBrowserScreen(
     }
 
     fun verifyDeniedCsfloat() {
-        quarantine()
+        pendingDeniedVerification = true
+        if (!quarantine()) return
 
         fun verificationFailed() {
             clearCsfloat()
@@ -383,7 +403,11 @@ fun GeckoBrowserScreen(
             return
         }
         requireNotNull(runtimeRef).webExtensionController.list().accept(
-            { extensions ->
+            success@{ extensions ->
+                if (extensions == null) {
+                    verificationFailed()
+                    return@success
+                }
                 val matching = extensions.orEmpty().filter { it.id == CsfloatExtensionContract.ID }
                 val enabled = matching.filter { it.metaData.enabled }
                 when {
