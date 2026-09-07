@@ -524,6 +524,9 @@ class ProductionGeckoSessionTest {
             clickText(automation, "Disable CSFloat")
             waitForTextContaining(automation, "CSFloat: disabled (5.17.0, signed)")
             waitForTextContaining(automation, "CSFloat popup: unavailable")
+            clickText(automation, "Close")
+            BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
+            waitForTextContaining(automation, "CSFloat: disabled (5.17.0, signed)")
             clickText(automation, "Enable CSFloat")
             waitForTextContaining(automation, "CSFloat: enabled (5.17.0, signed)")
 
