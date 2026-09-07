@@ -69,6 +69,9 @@ fun GeckoBrowserScreen(
     startUrl: String,
     allowedDomains: List<String>,
     showDetectorConsent: Boolean,
+    initialCsfloatQuarantine: Boolean,
+    quarantineRecoveryUrl: String,
+    persistCsfloatQuarantine: (Boolean, String) -> Boolean,
     persistDetectorConsent: () -> Boolean,
     onClose: () -> Unit,
 ) {
@@ -105,8 +108,12 @@ fun GeckoBrowserScreen(
     var pendingCleanupSuccess by remember { mutableStateOf("") }
     var runtimeRef: GeckoRuntime? = null
     var currentUrl by remember { mutableStateOf(startUrl) }
-    var safeRecoveryUrl by remember { mutableStateOf(startUrl) }
+    var safeRecoveryUrl by remember { mutableStateOf(quarantineRecoveryUrl) }
     var cleanupBlanking by remember { mutableStateOf(false) }
+    var csfloatQuarantined by remember { mutableStateOf(initialCsfloatQuarantine) }
+    var trustInspectionComplete by remember { mutableStateOf(false) }
+    var detectorReady by remember { mutableStateOf(false) }
+    var initialPageLoaded by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf(websiteId) }
     var progress by remember { mutableFloatStateOf(0f) }
     var loading by remember { mutableStateOf(true) }
@@ -132,6 +139,30 @@ fun GeckoBrowserScreen(
 
     fun renderPopupStatus() {
         popupState = popupStatus.state
+    }
+
+    fun maybeLoadInitialPage() {
+        if (!initialPageLoaded && detectorReady && trustInspectionComplete && !csfloatQuarantined) {
+            initialPageLoaded = true
+            sessionRef?.loadUri(safeRecoveryUrl)
+        }
+    }
+
+    fun quarantine() {
+        csfloatQuarantined = true
+        persistCsfloatQuarantine(true, safeRecoveryUrl)
+        cleanupBlanking = true
+        sessionRef?.loadUri("about:blank")
+    }
+
+    fun clearQuarantineAndRestore(): Boolean {
+        if (!persistCsfloatQuarantine(false, safeRecoveryUrl)) return false
+        csfloatQuarantined = false
+        trustInspectionComplete = true
+        val wasLoaded = initialPageLoaded
+        maybeLoadInitialPage()
+        if (wasLoaded) sessionRef?.loadUri(safeRecoveryUrl)
+        return true
     }
 
     fun closePopup() {
@@ -221,8 +252,7 @@ fun GeckoBrowserScreen(
 
     fun cleanupCsfloat(targets: List<WebExtension>, successMessage: String) {
         clearCsfloat()
-        cleanupBlanking = true
-        sessionRef?.loadUri("about:blank")
+        quarantine()
         pendingCleanup = targets
         pendingCleanupSuccess = successMessage
         val controller = requireNotNull(runtimeRef).webExtensionController
@@ -244,8 +274,11 @@ fun GeckoBrowserScreen(
                     } else {
                         pendingCleanup = emptyList()
                         pendingCleanupSuccess = ""
-                        csfloatState = successMessage
-                        sessionRef?.loadUri(safeRecoveryUrl)
+                        if (clearQuarantineAndRestore()) {
+                            csfloatState = successMessage
+                        } else {
+                            cleanupFailed()
+                        }
                     }
                 },
                 { cleanupFailed() },
@@ -287,13 +320,39 @@ fun GeckoBrowserScreen(
                     }
                     exact == null -> {
                         clearCsfloat()
-                        csfloatState = "CSFloat: absent"
+                        trustInspectionComplete = true
+                        if (csfloatQuarantined) {
+                            if (clearQuarantineAndRestore()) {
+                                csfloatState = "CSFloat: quarantine cleared; extension absent; browsing restored."
+                            } else {
+                                csfloatState = "CSFloat: quarantine persistence failed. Access remains closed; retry."
+                            }
+                        } else {
+                            csfloatState = "CSFloat: absent"
+                            maybeLoadInitialPage()
+                        }
                     }
                     !exact.metaData.enabled -> {
                         clearCsfloat()
-                        csfloatState = "CSFloat: denied or disabled"
+                        trustInspectionComplete = true
+                        if (csfloatQuarantined) {
+                            if (clearQuarantineAndRestore()) {
+                                csfloatState = "CSFloat: quarantine cleared; extension disabled; browsing restored."
+                            }
+                        } else {
+                            csfloatState = "CSFloat: denied or disabled"
+                            maybeLoadInitialPage()
+                        }
                     }
-                    else -> bindCsfloat(exact)
+                    csfloatQuarantined -> cleanupCsfloat(
+                        listOf(exact),
+                        "CSFloat: quarantine cleared; extension absent; browsing restored.",
+                    )
+                    else -> {
+                        bindCsfloat(exact)
+                        trustInspectionComplete = true
+                        maybeLoadInitialPage()
+                    }
                 }
             },
             {
@@ -301,6 +360,7 @@ fun GeckoBrowserScreen(
                 popupStatus.discoveryFailed()
                 renderPopupStatus()
                 csfloatState = "CSFloat: failed to inspect installed state. Retry."
+                if (!trustInspectionComplete || csfloatQuarantined) quarantine()
             },
         )
     }
@@ -309,8 +369,7 @@ fun GeckoBrowserScreen(
         fun verificationFailed() {
             clearCsfloat()
             pendingDeniedVerification = true
-            cleanupBlanking = true
-            sessionRef?.loadUri("about:blank")
+            quarantine()
             popupStatus.discoveryFailed()
             renderPopupStatus()
             csfloatState =
@@ -335,13 +394,13 @@ fun GeckoBrowserScreen(
                         clearCsfloat()
                         pendingDeniedVerification = false
                         csfloatState = csfloatDenialMessage(CsfloatDenialState.DISABLED)
-                        sessionRef?.loadUri(safeRecoveryUrl)
+                        clearQuarantineAndRestore()
                     }
                     else -> {
                         clearCsfloat()
                         pendingDeniedVerification = false
                         csfloatState = csfloatDenialMessage(CsfloatDenialState.ABSENT)
-                        sessionRef?.loadUri(safeRecoveryUrl)
+                        clearQuarantineAndRestore()
                     }
                 }
             },
@@ -503,13 +562,15 @@ fun GeckoBrowserScreen(
                 ) {
                     IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Close") }
                     Text(title, modifier = Modifier.weight(1f).padding(horizontal = 4.dp), maxLines = 1)
-                    IconButton(onClick = { sessionRef?.goBack() }, enabled = canGoBack) {
+                    IconButton(onClick = { sessionRef?.goBack() }, enabled = canGoBack && !csfloatQuarantined) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
-                    IconButton(onClick = { sessionRef?.goForward() }, enabled = canGoForward) {
+                    IconButton(onClick = { sessionRef?.goForward() }, enabled = canGoForward && !csfloatQuarantined) {
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, "Forward")
                     }
-                    IconButton(onClick = { sessionRef?.reload() }) { Icon(Icons.Filled.Refresh, "Refresh") }
+                    IconButton(onClick = { sessionRef?.reload() }, enabled = !csfloatQuarantined) {
+                        Icon(Icons.Filled.Refresh, "Refresh")
+                    }
                     IconButton(onClick = { openExternal(Uri.parse(safeRecoveryUrl)) }) {
                         Icon(Icons.Filled.OpenInBrowser, "Open externally")
                     }
@@ -647,6 +708,11 @@ fun GeckoBrowserScreen(
                             session: GeckoSession,
                             request: GeckoSession.NavigationDelegate.LoadRequest,
                         ): GeckoResult<AllowOrDeny> {
+                            if (csfloatQuarantined) {
+                                return GeckoResult.fromValue(
+                                    if (request.uri == "about:blank") AllowOrDeny.ALLOW else AllowOrDeny.DENY,
+                                )
+                            }
                             if (cleanupBlanking && request.uri == "about:blank") {
                                 return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                             }
@@ -728,12 +794,14 @@ fun GeckoBrowserScreen(
                                     DETECTOR_NATIVE_APP,
                                 )
                             }
-                            session.loadUri(startUrl)
+                            detectorReady = true
+                            maybeLoadInitialPage()
                         } },
                         { geckoView.post {
                             if (sessionRef === session) {
                                 error = "Steam profile image detection is unavailable. You can still sign in and browse."
-                                session.loadUri(startUrl)
+                                detectorReady = true
+                                maybeLoadInitialPage()
                             }
                         } },
                     )
