@@ -546,6 +546,10 @@ class ProductionGeckoSessionTest {
 
             clickText(automation, "Test pinned CSFloat update")
             waitForTextContaining(automation, "CSFloat update denied: reviewed version 5.17.0 remains pinned.")
+            waitForTextContaining(
+                automation,
+                "CSFloat update test: DENY confirmed; exact 5.17.0 signed enabled unchanged.",
+            )
             clickText(automation, "Uninstall CSFloat")
             waitForTextContaining(automation, "CSFloat: absent")
 
