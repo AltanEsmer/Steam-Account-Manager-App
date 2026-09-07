@@ -402,11 +402,16 @@ class ProductionGeckoSessionTest {
             waitForTextContaining(automation, "CSFloat popup: failed. Retry is available.")
             waitForTextToDisappear(automation, pageMarker)
             waitForText(automation, "Open externally")
+            assertControlEnabled(automation, "Back", false)
+            assertControlEnabled(automation, "Forward", false)
+            assertControlEnabled(automation, "Refresh", false)
 
-            clickText(automation, "Retry CSFloat")
+            clickText(automation, "Close")
+            stopBrowserWorker(context)
+            open(context, sessionId, server.url("CSFLOAT-CLEANUP"))
             waitForTextContaining(
                 automation,
-                "CSFloat: test cleanup complete; extension absent; browsing restored.",
+                "CSFloat: quarantine cleared; extension absent; browsing restored.",
             )
             waitForText(automation, pageMarker)
             waitForTextContaining(automation, "CSFloat popup: unavailable")
