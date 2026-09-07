@@ -83,7 +83,8 @@ class BrowserActivity : ComponentActivity() {
         val consentPreferences = getSharedPreferences(DETECTOR_CONSENT_PREFERENCES, MODE_PRIVATE)
         val showDetectorConsent = !consentPreferences.getBoolean(detectorConsentKey(profileId), false)
         val trustedMarker = File(profile, CSFLOAT_TRUSTED_MARKER)
-        val initialQuarantine = isCsfloatQuarantined(trustedMarker.isFile)
+        val pendingRestorationMarker = File(profile, CSFLOAT_PENDING_RESTORATION_MARKER)
+        val initialQuarantine = isCsfloatQuarantined(trustedMarker.isFile) || pendingRestorationMarker.isFile
 
         super.onCreate(savedInstanceState)
         setContent {
@@ -96,12 +97,22 @@ class BrowserActivity : ComponentActivity() {
                     allowedDomains = allowedDomains,
                     showDetectorConsent = showDetectorConsent,
                     initialCsfloatQuarantine = initialQuarantine,
+                    initialCsfloatRestorationPending = pendingRestorationMarker.isFile,
                     persistCsfloatQuarantine = { active ->
                         tryPersistCsfloatQuarantine {
                             if (active) {
                                 !trustedMarker.exists() || trustedMarker.delete()
                             } else {
                                 trustedMarker.isFile || trustedMarker.createNewFile()
+                            }
+                        }
+                    },
+                    persistCsfloatRestorationPending = { active ->
+                        tryPersistCsfloatQuarantine {
+                            if (active) {
+                                pendingRestorationMarker.isFile || pendingRestorationMarker.createNewFile()
+                            } else {
+                                !pendingRestorationMarker.exists() || pendingRestorationMarker.delete()
                             }
                         }
                     },
@@ -152,6 +163,7 @@ class BrowserActivity : ComponentActivity() {
         internal const val DETECTOR_CONSENT_PREFERENCES = "gecko_detector_consent"
         private const val DETECTOR_CONSENT_VERSION = "steam_profile_detector_consent_v2_"
         private const val CSFLOAT_TRUSTED_MARKER = ".csfloat-trusted"
+        private const val CSFLOAT_PENDING_RESTORATION_MARKER = ".csfloat-restoration-pending"
 
         internal fun detectorConsentKey(profileId: String) = DETECTOR_CONSENT_VERSION + profileId
 

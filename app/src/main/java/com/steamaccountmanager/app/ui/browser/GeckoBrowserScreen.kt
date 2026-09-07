@@ -70,7 +70,9 @@ fun GeckoBrowserScreen(
     allowedDomains: List<String>,
     showDetectorConsent: Boolean,
     initialCsfloatQuarantine: Boolean,
+    initialCsfloatRestorationPending: Boolean,
     persistCsfloatQuarantine: (Boolean) -> Boolean,
+    persistCsfloatRestorationPending: (Boolean) -> Boolean,
     persistDetectorConsent: () -> Boolean,
     onClose: () -> Unit,
 ) {
@@ -95,6 +97,7 @@ fun GeckoBrowserScreen(
     var installAllowsDataCollection by remember { mutableStateOf(false) }
     var installDenied by remember { mutableStateOf(false) }
     var updatePinned by remember { mutableStateOf(false) }
+    var updateTestState by remember { mutableStateOf<String?>(null) }
     val popupStatus = remember { CsfloatPopupStatus() }
     var popupState by remember { mutableStateOf(popupStatus.state) }
     var popupDialog by remember { mutableStateOf<Dialog?>(null) }
@@ -113,6 +116,7 @@ fun GeckoBrowserScreen(
     var safeRecoveryUrl by remember { mutableStateOf(startUrl) }
     var cleanupBlanking by remember { mutableStateOf(false) }
     var csfloatQuarantined by remember { mutableStateOf(initialCsfloatQuarantine) }
+    var csfloatRestorationPending by remember { mutableStateOf(initialCsfloatRestorationPending) }
     var trustInspectionComplete by remember { mutableStateOf(false) }
     var detectorReady by remember { mutableStateOf(false) }
     var initialPageLoaded by remember { mutableStateOf(false) }
@@ -163,6 +167,12 @@ fun GeckoBrowserScreen(
         false
     }
 
+    fun persistRestorationPending(active: Boolean): Boolean = try {
+        persistCsfloatRestorationPending(active)
+    } catch (_: Exception) {
+        false
+    }
+
     fun quarantine(): Boolean {
         csfloatQuarantined = true
         cleanupBlanking = true
@@ -184,6 +194,27 @@ fun GeckoBrowserScreen(
         maybeLoadInitialPage()
         if (wasLoaded) sessionRef?.loadUri(safeRecoveryUrl)
         return true
+    }
+
+    fun beginRestoration(): Boolean {
+        if (!persistRestorationPending(true)) return false
+        csfloatRestorationPending = true
+        return quarantine()
+    }
+
+    fun clearRestorationPending(): Boolean {
+        if (!csfloatRestorationPending) return true
+        if (!persistRestorationPending(false)) return false
+        csfloatRestorationPending = false
+        return true
+    }
+
+    fun finishRestorationAndRestore(): Boolean {
+        if (!clearRestorationPending()) return false
+        if (clearQuarantineAndRestore()) return true
+        if (persistRestorationPending(true)) csfloatRestorationPending = true
+        quarantine()
+        return false
     }
 
     fun closePopup() {
@@ -295,6 +326,10 @@ fun GeckoBrowserScreen(
                         cleanupFailed()
                     } else {
                         installedCsfloatRef = null
+                        if (!clearRestorationPending()) {
+                            cleanupFailed()
+                            return@accept
+                        }
                         pendingCleanup = emptyList()
                         pendingCleanupSuccess = ""
                         if (clearQuarantineAndRestore()) {
@@ -327,9 +362,14 @@ fun GeckoBrowserScreen(
         }
     }
 
-    fun discoverCsfloat(absentMessage: String? = null) {
+    fun discoverCsfloat(
+        absentMessage: String? = null,
+        pendingInspections: Int = 50,
+        inspectionGeneration: Long = mutationGeneration,
+    ) {
         requireNotNull(runtimeRef).webExtensionController.list().accept(
             success@{ extensions ->
+                if (inspectionGeneration != mutationGeneration) return@success
                 if (extensions == null) {
                     clearCsfloat()
                     popupStatus.discoveryFailed()
@@ -349,6 +389,18 @@ fun GeckoBrowserScreen(
                             "CSFloat: unexpected package removed after verification. Retry installation.",
                         )
                     }
+                    exact == null && csfloatRestorationPending -> {
+                        clearCsfloat()
+                        trustInspectionComplete = true
+                        if (pendingInspections > 0) {
+                            Handler(Looper.getMainLooper()).postDelayed(
+                                { discoverCsfloat(absentMessage, pendingInspections - 1, inspectionGeneration) },
+                                500,
+                            )
+                        } else {
+                            csfloatState = "CSFloat: restoration interrupted; extension absent. Retry installation."
+                        }
+                    }
                     exact == null -> {
                         clearCsfloat()
                         installedCsfloatRef = null
@@ -364,6 +416,19 @@ fun GeckoBrowserScreen(
                         } else {
                             csfloatState = absentMessage ?: "CSFloat: absent"
                             maybeLoadInitialPage()
+                        }
+                    }
+                    !exact.metaData.enabled && csfloatRestorationPending -> {
+                        clearCsfloat()
+                        installedCsfloatRef = exact
+                        trustInspectionComplete = true
+                        if (pendingInspections > 0) {
+                            Handler(Looper.getMainLooper()).postDelayed(
+                                { discoverCsfloat(absentMessage, pendingInspections - 1, inspectionGeneration) },
+                                500,
+                            )
+                        } else {
+                            csfloatState = "CSFloat: restoration interrupted; extension disabled. Retry enable."
                         }
                     }
                     !exact.metaData.enabled -> {
@@ -382,6 +447,12 @@ fun GeckoBrowserScreen(
                             csfloatState = "CSFloat: disabled (${exact.metaData.version}, signed)"
                             maybeLoadInitialPage()
                         }
+                    }
+                    csfloatRestorationPending -> {
+                        if (finishRestorationAndRestore()) bindCsfloat(exact)
+                        else quarantineRestoreFailed(
+                            "CSFloat: restoration verified but quarantine clearance failed. Access remains closed; retry.",
+                        )
                     }
                     csfloatQuarantined && trustAcceptedInstall -> {
                         trustAcceptedInstall = false
@@ -406,6 +477,7 @@ fun GeckoBrowserScreen(
                 }
             },
             {
+                if (inspectionGeneration != mutationGeneration) return@accept
                 clearCsfloat()
                 popupStatus.discoveryFailed()
                 renderPopupStatus()
@@ -418,7 +490,7 @@ fun GeckoBrowserScreen(
     fun mutateCsfloat(enable: Boolean) {
         if (csfloatBusy) return
         val target = installedCsfloatRef ?: return
-        if (!quarantine()) return
+        if (!(if (enable) beginRestoration() else quarantine())) return
         val generation = ++mutationGeneration
         csfloatBusy = true
         clearCsfloat()
@@ -459,7 +531,7 @@ fun GeckoBrowserScreen(
                     }
                     installedCsfloatRef = exact
                     csfloatBusy = false
-                    if (!clearQuarantineAndRestore()) {
+                    if (!(if (enable) finishRestorationAndRestore() else clearQuarantineAndRestore())) {
                         failed()
                     } else if (enable) {
                         bindCsfloat(exact)
@@ -515,7 +587,7 @@ fun GeckoBrowserScreen(
                     }
                     matching.isNotEmpty() -> {
                         clearCsfloat()
-                        if (clearQuarantineAndRestore()) {
+                        if (clearRestorationPending() && clearQuarantineAndRestore()) {
                             pendingDeniedVerification = false
                             csfloatState = csfloatDenialMessage(CsfloatDenialState.DISABLED)
                         } else {
@@ -526,7 +598,7 @@ fun GeckoBrowserScreen(
                     }
                     else -> {
                         clearCsfloat()
-                        if (clearQuarantineAndRestore()) {
+                        if (clearRestorationPending() && clearQuarantineAndRestore()) {
                             pendingDeniedVerification = false
                             csfloatState = csfloatDenialMessage(CsfloatDenialState.ABSENT)
                         } else {
@@ -545,7 +617,8 @@ fun GeckoBrowserScreen(
 
     fun installCsfloat() {
         if (csfloatBusy) return
-        if (!quarantine()) return
+        if (!beginRestoration()) return
+        val generation = ++mutationGeneration
         csfloatBusy = true
         installDenied = false
         trustAcceptedInstall = false
@@ -554,6 +627,11 @@ fun GeckoBrowserScreen(
             try {
                 val file = CsfloatExtensionContract.downloadVerified(context.cacheDir)
                 tempXpi = file
+                if (generation != mutationGeneration) {
+                    file.delete()
+                    tempXpi = null
+                    return@launch
+                }
                 requireNotNull(runtimeRef).webExtensionController.install(
                     Uri.fromFile(file).toString(),
                     WebExtensionController.INSTALLATION_METHOD_FROM_FILE,
@@ -561,6 +639,7 @@ fun GeckoBrowserScreen(
                     { extension ->
                         file.delete()
                         tempXpi = null
+                        if (generation != mutationGeneration) return@accept
                         csfloatBusy = false
                         if (installDenied) {
                             verifyDeniedCsfloat()
@@ -590,6 +669,7 @@ fun GeckoBrowserScreen(
                     {
                         file.delete()
                         tempXpi = null
+                        if (generation != mutationGeneration) return@accept
                         csfloatBusy = false
                         if (installDenied) {
                             verifyDeniedCsfloat()
@@ -604,6 +684,7 @@ fun GeckoBrowserScreen(
             } catch (_: Exception) {
                 tempXpi?.delete()
                 tempXpi = null
+                if (generation != mutationGeneration) return@launch
                 csfloatBusy = false
                 discoverCsfloat("CSFloat: download verification failed. Check the network and retry.")
             }
@@ -720,7 +801,7 @@ fun GeckoBrowserScreen(
                     Text(csfloatState, modifier = Modifier.weight(1f), maxLines = 2)
                     TextButton(
                         onClick = { installCsfloat() },
-                        enabled = csfloatInstallEnabled(trustInspectionComplete, csfloatQuarantined) &&
+                        enabled = trustInspectionComplete && (!csfloatQuarantined || csfloatRestorationPending) &&
                             !csfloatBusy && csfloatExtensionRef == null &&
                             !pendingDeniedVerification && pendingCleanup.isEmpty(),
                     ) {
@@ -750,7 +831,8 @@ fun GeckoBrowserScreen(
                     if (installed != null) {
                         TextButton(
                             onClick = { mutateCsfloat(enable = !installed.metaData.enabled) },
-                            enabled = !csfloatBusy && !csfloatQuarantined &&
+                            enabled = !csfloatBusy &&
+                                (!csfloatQuarantined || (csfloatRestorationPending && !installed.metaData.enabled)) &&
                                 pendingCleanup.isEmpty() && !pendingDeniedVerification,
                         ) {
                             Text(if (installed.metaData.enabled) "Disable CSFloat" else "Enable CSFloat")
@@ -782,7 +864,44 @@ fun GeckoBrowserScreen(
                     if (debugBuild && popupState == CsfloatPopupState.AVAILABLE) {
                         TextButton(onClick = {
                             val extension = installedCsfloatRef ?: return@TextButton
-                            promptDelegate.onUpdatePrompt(extension, emptyArray(), emptyArray(), emptyArray())
+                            updateTestState = "CSFloat update test: verifying denial and installed package…"
+                            promptDelegate.onUpdatePrompt(extension, emptyArray(), emptyArray(), emptyArray()).accept(
+                                { decision ->
+                                    if (decision != AllowOrDeny.DENY) {
+                                        quarantine()
+                                        updateTestState = "CSFloat update test failed: update was not denied; access closed."
+                                    } else {
+                                        requireNotNull(runtimeRef).webExtensionController.list().accept(
+                                            { extensions ->
+                                                val exact = extensions?.singleOrNull {
+                                                    CsfloatExtensionContract.isExpected(
+                                                        it.id,
+                                                        it.metaData.version,
+                                                        it.metaData.signedState,
+                                                    ) && it.metaData.enabled
+                                                }
+                                                if (exact == null) {
+                                                    quarantine()
+                                                    updateTestState =
+                                                        "CSFloat update test failed: exact installed state changed; access closed."
+                                                } else {
+                                                    updateTestState =
+                                                        "CSFloat update test: DENY confirmed; exact 5.17.0 signed enabled unchanged."
+                                                }
+                                            },
+                                            {
+                                                quarantine()
+                                                updateTestState =
+                                                    "CSFloat update test failed: installed state unavailable; access closed."
+                                            },
+                                        )
+                                    }
+                                },
+                                {
+                                    quarantine()
+                                    updateTestState = "CSFloat update test failed: denial result unavailable; access closed."
+                                },
+                            )
                         }) { Text("Test pinned CSFloat update") }
                         TextButton(onClick = { failNextPopupForTest = true }) {
                             Text("Test CSFloat popup failure")
@@ -819,6 +938,7 @@ fun GeckoBrowserScreen(
                     },
                     Modifier.padding(8.dp),
                 )
+                updateTestState?.let { Text(it, Modifier.padding(horizontal = 8.dp)) }
             }
         }
         if (loading) {
