@@ -540,6 +540,8 @@ class ProductionGeckoSessionTest {
             BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
             waitForTextContaining(automation, "CSFloat: disabled (5.17.0, signed)")
             clickText(automation, "Enable CSFloat")
+            clickText(automation, "Close")
+            BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
             waitForTextContaining(automation, "CSFloat: enabled (5.17.0, signed)")
 
             clickText(automation, "Test pinned CSFloat update")
@@ -557,6 +559,8 @@ class ProductionGeckoSessionTest {
             clickText(automation, "Install CSFloat")
             waitForText(automation, "Install-time CSFloat access request")
             clickText(automation, "Accept CSFloat access")
+            clickText(automation, "Close")
+            BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
             waitForTextContaining(automation, "CSFloat: enabled (5.17.0, signed)")
 
             stopBrowserWorker(context)
