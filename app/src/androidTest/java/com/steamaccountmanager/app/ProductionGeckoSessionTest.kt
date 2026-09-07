@@ -293,6 +293,77 @@ class ProductionGeckoSessionTest {
         }
     }
 
+    @Test
+    fun productionCsfloatInstallCanBeInspectedAndDeniedWithoutBreakingBrowsing() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val sessionId = SessionIdentifier("instrumentation-csfloat-denial-${UUID.randomUUID()}", "steam")
+        val server = LoopbackFixture(UUID.randomUUID().toString().replace("-", ""))
+
+        try {
+            stopBrowserWorker(context)
+            clearSyntheticDetectorConsent(context, sessionId)
+            server.start()
+            open(context, sessionId, server.url("CSFLOAT-DENY"))
+            waitForText(automation, "Allow Steam profile detection?")
+            clickText(automation, "Allow and continue")
+            waitForTextContaining(automation, "CSFloat: absent")
+            clickText(automation, "Install CSFloat")
+            waitForText(automation, "Install-time CSFloat access request")
+            waitForTextContaining(automation, "*://*.steampowered.com/*")
+            clickText(automation, "Deny CSFloat access")
+            waitForTextContaining(automation, "CSFloat: absent")
+            waitForTextContaining(automation, "PROD-GECKO|requested=CSFLOAT-DENY")
+        } finally {
+            stopBrowserWorker(context)
+            server.close()
+        }
+    }
+
+    @Test
+    fun productionCsfloatAcceptsAndRemainsIsolatedByBrowserSession() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val marker = UUID.randomUUID().toString().replace("-", "")
+        val sessionA = SessionIdentifier("instrumentation-csfloat-a-$marker", "steam")
+        val sessionB = SessionIdentifier("instrumentation-csfloat-b-$marker", "steam")
+        val steamListing = "https://steamcommunity.com/market/listings/730/AK-47"
+
+        try {
+            stopBrowserWorker(context)
+            clearSyntheticDetectorConsent(context, sessionA, sessionB)
+
+            BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
+            waitForText(automation, "Allow Steam profile detection?")
+            clickText(automation, "Allow and continue")
+            waitForTextContaining(automation, "CSFloat: absent")
+            clickText(automation, "Install CSFloat")
+            waitForText(automation, "Install-time CSFloat access request")
+            waitForTextContaining(automation, "ID: {194d0dc6-7ada-41c6-88b8-95d7636fe43c}")
+            waitForTextContaining(automation, "Version: 5.17.0")
+            clickText(automation, "Accept CSFloat access")
+            waitForTextContaining(automation, "CSFloat: enabled")
+            waitForTextContaining(automation, "Tracking: official action ready")
+
+            BrowserProcessController.openWebsite(context, sessionB, steamListing, listOf("steamcommunity.com"))
+            waitForText(automation, "Allow Steam profile detection?")
+            clickText(automation, "Allow and continue")
+            waitForTextContaining(automation, "CSFloat: absent")
+            assertFalse("Session B exposed session A's active CSFloat state", hasTextContaining(
+                automation.rootInActiveWindow,
+                "Tracking: active",
+            ))
+
+            BrowserProcessController.openWebsite(context, sessionA, steamListing, listOf("steamcommunity.com"))
+            waitForTextContaining(automation, "CSFloat: enabled")
+            waitForTextContaining(automation, "Tracking: official action ready")
+        } finally {
+            stopBrowserWorker(context)
+        }
+    }
+
     private suspend fun open(context: Context, sessionId: SessionIdentifier, url: String) {
         BrowserProcessController.openWebsite(
             context = context,
@@ -371,6 +442,23 @@ class ProductionGeckoSessionTest {
         assertTrue("Accessibility marker remained visible: $expected", waitUntil(UI_TIMEOUT_MS) {
             !hasExactText(automation, expected)
         })
+    }
+
+    private fun waitForTextContaining(automation: android.app.UiAutomation, expected: String) {
+        assertTrue("Timed out waiting for accessibility text containing: $expected", waitUntil(UI_TIMEOUT_MS) {
+            hasTextContaining(automation.rootInActiveWindow, expected)
+        })
+    }
+
+    private fun hasTextContaining(root: AccessibilityNodeInfo?, expected: String): Boolean {
+        if (root == null) return false
+        if (root.text?.toString()?.contains(expected) == true ||
+            root.contentDescription?.toString()?.contains(expected) == true
+        ) return true
+        for (index in 0 until root.childCount) {
+            if (hasTextContaining(root.getChild(index), expected)) return true
+        }
+        return false
     }
 
     private fun clickText(automation: android.app.UiAutomation, expected: String) {

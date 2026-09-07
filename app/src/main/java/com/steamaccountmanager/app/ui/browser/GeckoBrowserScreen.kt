@@ -82,6 +82,7 @@ fun GeckoBrowserScreen(
     var csfloatBusy by remember { mutableStateOf(false) }
     var installPromptText by remember { mutableStateOf<String?>(null) }
     var installPromptResult by remember { mutableStateOf<GeckoResult<WebExtension.PermissionPromptResponse>?>(null) }
+    var installAllowsDataCollection by remember { mutableStateOf(false) }
     var updatePinned by remember { mutableStateOf(false) }
     val tracking = remember { CsfloatTracking() }
     var trackingState by remember { mutableStateOf(tracking.state) }
@@ -194,8 +195,12 @@ fun GeckoBrowserScreen(
 
     fun bindCsfloat(extension: WebExtension) {
         clearCsfloat()
-        if (!CsfloatExtensionContract.isExpected(extension.id, extension.metaData.version, extension.metaData.signedState) ||
-            !extension.metaData.enabled
+        if (!CsfloatExtensionContract.canBindAction(
+                extension.id,
+                extension.metaData.version,
+                extension.metaData.signedState,
+                extension.metaData.enabled,
+            )
         ) return
         csfloatExtensionRef = extension
         extension.setActionDelegate(actionDelegate)
@@ -213,7 +218,7 @@ fun GeckoBrowserScreen(
                 when {
                     byId.isNotEmpty() && exact == null -> {
                         clearCsfloat()
-                        byId.forEach { runtime.webExtensionController.uninstall(it) }
+                        byId.forEach { requireNotNull(runtimeRef).webExtensionController.uninstall(it) }
                         csfloatState = "CSFloat: failed package validation. Unexpected package was rejected; retry."
                     }
                     exact == null -> {
@@ -296,6 +301,7 @@ fun GeckoBrowserScreen(
                 }
                 return GeckoResult<WebExtension.PermissionPromptResponse>().also {
                     installPromptResult = it
+                    installAllowsDataCollection = dataCollectionPermissions.isNotEmpty()
                     installPromptText = CsfloatExtensionContract.prompt(
                         extension.metaData.name,
                         extension.id,
@@ -622,7 +628,9 @@ fun GeckoBrowserScreen(
             text = { Text(prompt) },
             confirmButton = {
                 TextButton(onClick = {
-                    installPromptResult?.complete(WebExtension.PermissionPromptResponse(true, false, false))
+                    installPromptResult?.complete(
+                        WebExtension.PermissionPromptResponse(true, false, installAllowsDataCollection),
+                    )
                     installPromptResult = null
                     installPromptText = null
                 }) { Text("Accept CSFloat access") }

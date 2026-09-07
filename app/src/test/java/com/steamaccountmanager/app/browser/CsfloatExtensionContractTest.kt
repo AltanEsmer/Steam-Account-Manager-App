@@ -22,4 +22,74 @@ class CsfloatExtensionContractTest {
         assertTrue(CsfloatExtensionContract.isExpected(CsfloatExtensionContract.ID, "5.17.0", 2))
         assertFalse(CsfloatExtensionContract.isExpected(CsfloatExtensionContract.ID, "5.17.1", 2))
     }
+
+    @Test
+    fun promptPreservesEveryCallbackItemVerbatim() {
+        assertEquals(
+            """Extension: CSFloat Market Checker
+ID: {194d0dc6-7ada-41c6-88b8-95d7636fe43c}
+Version: 5.17.0
+Permissions (2):
+• storage
+• alarms
+Origins (2):
+• *://*.steampowered.com/*
+• https://csfloat.com/*
+Data collection (1):
+• authenticationInfo""",
+            CsfloatExtensionContract.prompt(
+                "CSFloat Market Checker",
+                CsfloatExtensionContract.ID,
+                CsfloatExtensionContract.VERSION,
+                listOf("storage", "alarms"),
+                listOf("*://*.steampowered.com/*", "https://csfloat.com/*"),
+                listOf("authenticationInfo"),
+            ),
+        )
+    }
+
+    @Test
+    fun artifactAndActionRejectEveryReviewedMetadataMismatch() {
+        assertTrue(CsfloatExtensionContract.artifactMatches(7_011_169, CsfloatExtensionContract.SHA256))
+        assertFalse(CsfloatExtensionContract.artifactMatches(7_011_168, CsfloatExtensionContract.SHA256))
+        assertFalse(CsfloatExtensionContract.artifactMatches(7_011_169, "00"))
+        assertTrue(CsfloatExtensionContract.canBindAction(CsfloatExtensionContract.ID, "5.17.0", 2, true))
+        assertFalse(CsfloatExtensionContract.canBindAction(CsfloatExtensionContract.ID, "5.17.0", 2, false))
+        assertFalse(CsfloatExtensionContract.canBindAction("other", "5.17.0", 2, true))
+        assertFalse(CsfloatExtensionContract.canBindAction(CsfloatExtensionContract.ID, "5.17.1", 2, true))
+        assertFalse(CsfloatExtensionContract.canBindAction(CsfloatExtensionContract.ID, "5.17.0", 0, true))
+    }
+
+    @Test
+    fun trackingRequiresCurrentPopupAndVisibleOfficialStatus() {
+        val tracking = CsfloatTracking()
+        tracking.actionAvailable()
+        assertEquals(CsfloatTrackingState.READY, tracking.state)
+        tracking.recordVisibleStatus()
+        assertEquals(CsfloatTrackingState.READY, tracking.state)
+
+        val request = tracking.request {}
+        assertFalse(tracking.popupOpened(request?.plus(1)))
+        assertEquals(request, tracking.pendingRequest)
+        assertTrue(tracking.popupOpened(request))
+        assertEquals(CsfloatTrackingState.READY, tracking.state)
+        tracking.recordVisibleStatus()
+        assertEquals(CsfloatTrackingState.ACTIVE, tracking.state)
+    }
+
+    @Test
+    fun trackingFailureRecoversWithoutAcceptingStaleCallbacks() {
+        val tracking = CsfloatTracking()
+        tracking.actionAvailable()
+        val failedRequest = tracking.request {}
+        assertTrue(tracking.failed(failedRequest))
+        assertEquals(CsfloatTrackingState.FAILED, tracking.state)
+        assertFalse(tracking.popupOpened(failedRequest))
+        tracking.recover()
+        assertEquals(CsfloatTrackingState.UNAVAILABLE, tracking.state)
+        tracking.actionAvailable()
+        val current = tracking.request {}
+        assertFalse(tracking.popupOpened(failedRequest))
+        assertTrue(tracking.popupOpened(current))
+    }
 }

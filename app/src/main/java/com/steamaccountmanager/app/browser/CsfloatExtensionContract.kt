@@ -18,6 +18,12 @@ object CsfloatExtensionContract {
     fun isExpected(id: String?, version: String?, signedState: Int): Boolean =
         id == ID && version == VERSION && signedState == SIGNED_STATE
 
+    fun artifactMatches(size: Long, sha256: String): Boolean =
+        size == SIZE_BYTES && sha256 == SHA256
+
+    fun canBindAction(id: String?, version: String?, signedState: Int, enabled: Boolean): Boolean =
+        enabled && isExpected(id, version, signedState)
+
     fun prompt(
         name: String?,
         id: String?,
@@ -60,7 +66,7 @@ object CsfloatExtensionContract {
                 }
             }
             val hash = digest.digest().joinToString("") { "%02X".format(it) }
-            if (size != SIZE_BYTES || hash != SHA256) error("CSFLOAT_ARTIFACT_MISMATCH")
+            if (!artifactMatches(size, hash)) error("CSFLOAT_ARTIFACT_MISMATCH")
             target
         } catch (failure: Exception) {
             target.delete()
