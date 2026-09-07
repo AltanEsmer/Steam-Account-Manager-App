@@ -1,12 +1,12 @@
 package com.steamaccountmanager.app.browser
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewClientCompat
+import java.net.URI
 
 /**
  * Restricts navigation for a single browser session to its configured website's
@@ -19,11 +19,25 @@ class WebsitePolicy(
     private val primaryDomain: String,
     private val allowedAuthDomains: List<String>,
 ) {
+    enum class NavigationDecision { ALLOW_IN_APP, OFFER_EXTERNAL, REJECT }
+
     private val allDomains: List<String> = (listOf(primaryDomain) + allowedAuthDomains).map { it.lowercase() }
 
     fun isHostAllowed(host: String?): Boolean {
         val h = host?.lowercase() ?: return false
         return allDomains.any { domain -> h == domain || h.endsWith(".$domain") }
+    }
+
+    fun decideNavigation(url: String): NavigationDecision {
+        val uri = try {
+            URI(url)
+        } catch (_: Exception) {
+            return NavigationDecision.REJECT
+        }
+        if (uri.scheme?.lowercase() !in setOf("http", "https") || uri.host == null || uri.rawUserInfo != null) {
+            return NavigationDecision.REJECT
+        }
+        return if (isHostAllowed(uri.host)) NavigationDecision.ALLOW_IN_APP else NavigationDecision.OFFER_EXTERNAL
     }
 }
 
@@ -48,16 +62,13 @@ class DomainRestrictedWebViewClient(
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val uri = request.url
-        if (uri.scheme != "https" && uri.scheme != "http") {
-            // Let the OS handle non-web schemes (e.g. intent://, mailto:) rather than
-            // trying to load them in the WebView.
-            return tryLaunchExternalIntent(uri)
-        }
-        return if (policy.isHostAllowed(uri.host)) {
-            false // allow WebView to load it normally
-        } else {
-            onBlockedNavigation(uri)
-            true // we handle it (by not loading it in-app)
+        return when (policy.decideNavigation(uri.toString())) {
+            WebsitePolicy.NavigationDecision.ALLOW_IN_APP -> false
+            WebsitePolicy.NavigationDecision.OFFER_EXTERNAL -> {
+                onBlockedNavigation(uri)
+                true
+            }
+            WebsitePolicy.NavigationDecision.REJECT -> true
         }
     }
 
@@ -76,16 +87,6 @@ class DomainRestrictedWebViewClient(
     ) {
         if (request.isForMainFrame) {
             onLoadError(error.errorCode, error.description?.toString())
-        }
-    }
-
-    private fun tryLaunchExternalIntent(uri: Uri): Boolean {
-        return try {
-            val intent = Intent(Intent.ACTION_VIEW, uri)
-            context.startActivity(intent)
-            true
-        } catch (_: Exception) {
-            true // swallow -- nothing sensible we can do in-app with an unhandled scheme
         }
     }
 }

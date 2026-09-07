@@ -78,6 +78,10 @@ fun GeckoBrowserScreen(
     var consentPersistenceFailed by remember { mutableStateOf(false) }
 
     fun openExternal(uri: Uri) {
+        if (policy.decideNavigation(uri.toString()) == WebsitePolicy.NavigationDecision.REJECT) {
+            error = REJECTED_NAVIGATION_MESSAGE
+            return
+        }
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, uri))
         } catch (_: Exception) {
@@ -179,14 +183,25 @@ fun GeckoBrowserScreen(
                             session: GeckoSession,
                             request: GeckoSession.NavigationDelegate.LoadRequest,
                         ): GeckoResult<AllowOrDeny> {
-                            val uri = Uri.parse(request.uri)
-                            val allowed = uri.scheme in setOf("http", "https") && policy.isHostAllowed(uri.host)
-                            if (!allowed) blockedUri = uri
-                            if (allowed && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
+                            val decision = policy.decideNavigation(request.uri)
+                            if (decision == WebsitePolicy.NavigationDecision.OFFER_EXTERNAL) {
+                                blockedUri = Uri.parse(request.uri)
+                            } else if (decision == WebsitePolicy.NavigationDecision.REJECT) {
+                                error = REJECTED_NAVIGATION_MESSAGE
+                            }
+                            if (decision == WebsitePolicy.NavigationDecision.ALLOW_IN_APP &&
+                                request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW
+                            ) {
                                 Handler(Looper.getMainLooper()).post { session.loadUri(request.uri) }
                                 return GeckoResult.fromValue(AllowOrDeny.DENY)
                             }
-                            return GeckoResult.fromValue(if (allowed) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
+                            return GeckoResult.fromValue(
+                                if (decision == WebsitePolicy.NavigationDecision.ALLOW_IN_APP) {
+                                    AllowOrDeny.ALLOW
+                                } else {
+                                    AllowOrDeny.DENY
+                                },
+                            )
                         }
                     }
                     session.progressDelegate = object : GeckoSession.ProgressDelegate {
@@ -325,3 +340,4 @@ private fun detectorDelegate(
 private const val DETECTOR_URI = "resource://android/assets/steam-profile-detector/"
 private const val DETECTOR_EXTENSION_ID = "steam-profile-detector@steam-account-manager.invalid"
 private const val DETECTOR_NATIVE_APP = "steamProfileDetector"
+private const val REJECTED_NAVIGATION_MESSAGE = "This link cannot be opened safely. You can stay here and try another link."
