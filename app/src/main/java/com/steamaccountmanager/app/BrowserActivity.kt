@@ -187,7 +187,7 @@ class BrowserActivity : ComponentActivity() {
 
 internal fun tryPersistCsfloatQuarantine(persist: () -> Boolean): Boolean = try {
     persist()
-} catch (_: RuntimeException) {
+} catch (_: Exception) {
     false
 }
 

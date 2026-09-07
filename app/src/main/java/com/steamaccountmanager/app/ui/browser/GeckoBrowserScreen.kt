@@ -150,7 +150,7 @@ fun GeckoBrowserScreen(
 
     fun persistQuarantine(active: Boolean): Boolean = try {
         persistCsfloatQuarantine(active)
-    } catch (_: RuntimeException) {
+    } catch (_: Exception) {
         false
     }
 
@@ -316,7 +316,7 @@ fun GeckoBrowserScreen(
         }
     }
 
-    fun discoverCsfloat() {
+    fun discoverCsfloat(absentMessage: String? = null) {
         requireNotNull(runtimeRef).webExtensionController.list().accept(
             success@{ extensions ->
                 if (extensions == null) {
@@ -343,12 +343,12 @@ fun GeckoBrowserScreen(
                         trustInspectionComplete = true
                         if (csfloatQuarantined) {
                             if (clearQuarantineAndRestore()) {
-                                csfloatState = "CSFloat: absent"
+                                csfloatState = absentMessage ?: "CSFloat: absent"
                             } else {
                                 csfloatState = "CSFloat: quarantine persistence failed. Access remains closed; retry."
                             }
                         } else {
-                            csfloatState = "CSFloat: absent"
+                            csfloatState = absentMessage ?: "CSFloat: absent"
                             maybeLoadInitialPage()
                         }
                     }
@@ -480,8 +480,9 @@ fun GeckoBrowserScreen(
                         } else {
                             if (extension == null) {
                                 clearCsfloat()
-                                csfloatState = "CSFloat: install returned no package. Retry; browsing remains available."
-                                discoverCsfloat()
+                                discoverCsfloat(
+                                    "CSFloat: install returned no package. Retry; browsing remains available.",
+                                )
                             } else {
                                 cleanupCsfloat(
                                     listOf(extension),
@@ -498,9 +499,9 @@ fun GeckoBrowserScreen(
                             verifyDeniedCsfloat()
                         } else {
                             clearCsfloat()
-                            csfloatState =
-                                "CSFloat: install failed. Check the network and retry; browsing remains available."
-                            discoverCsfloat()
+                            discoverCsfloat(
+                                "CSFloat: install failed. Check the network and retry; browsing remains available.",
+                            )
                         }
                     },
                 )
@@ -508,8 +509,7 @@ fun GeckoBrowserScreen(
                 tempXpi?.delete()
                 tempXpi = null
                 csfloatBusy = false
-                csfloatState = "CSFloat: download verification failed. Check the network and retry."
-                discoverCsfloat()
+                discoverCsfloat("CSFloat: download verification failed. Check the network and retry.")
             }
         }
     }
