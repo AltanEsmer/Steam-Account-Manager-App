@@ -822,7 +822,7 @@ class ProductionGeckoSessionTest {
     private fun capturePublicProof(context: Context, automation: android.app.UiAutomation, name: String) {
         // Accessibility labels can arrive before Gecko's first rendered frame/dialog animation.
         SystemClock.sleep(1_000)
-        val directory = java.io.File(context.getExternalFilesDir(null), "verification").apply { mkdirs() }
+        val directory = java.io.File(context.filesDir, "verification").apply { mkdirs() }
         val bitmap = requireNotNull(automation.takeScreenshot())
         java.io.File(directory, "$name.png").outputStream().use {
             assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it))
