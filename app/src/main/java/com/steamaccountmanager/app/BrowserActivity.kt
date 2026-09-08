@@ -6,6 +6,8 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.steamaccountmanager.app.browser.BrowserProcessController
+import com.steamaccountmanager.app.browser.BrowserExtensionPackages
+import com.steamaccountmanager.app.browser.BrowserExtensionNotifications
 import com.steamaccountmanager.app.browser.GeckoProfileIdentity
 import com.steamaccountmanager.app.domain.model.SessionIdentifier
 import com.steamaccountmanager.app.ui.browser.GeckoBrowserScreen
@@ -37,6 +39,7 @@ class BrowserActivity : ComponentActivity() {
         }
 
         val steamFeaturesEnabled = usesSteamBrowserFeatures(websiteId)
+        val extensionEnabled = BrowserExtensionPackages.forWebsite(websiteId) != null
         val profileId = GeckoProfileIdentity.idFor(sessionId)
         val profile = GeckoProfileIdentity.pathFor(File(noBackupFilesDir, GECKO_PROFILE_ROOT), sessionId)
         if ((!profile.exists() && !profile.mkdirs()) || !profile.isDirectory) {
@@ -59,6 +62,9 @@ class BrowserActivity : ComponentActivity() {
             ).also {
                 sharedRuntime = it
                 sharedProfileId = profileId
+                BrowserExtensionPackages.forWebsite(websiteId)?.let { extension ->
+                    it.webNotificationDelegate = BrowserExtensionNotifications(applicationContext, extension.NAME)
+                }
             }
         }
 
@@ -67,7 +73,7 @@ class BrowserActivity : ComponentActivity() {
             !consentPreferences.getBoolean(detectorConsentKey(profileId), false)
         val trustedMarker = File(profile, CSFLOAT_TRUSTED_MARKER)
         val pendingRestorationMarker = File(profile, CSFLOAT_PENDING_RESTORATION_MARKER)
-        val initialQuarantine = steamFeaturesEnabled &&
+        val initialQuarantine = extensionEnabled &&
             (isCsfloatQuarantined(trustedMarker.isFile) || pendingRestorationMarker.isFile)
 
         super.onCreate(savedInstanceState)
@@ -82,7 +88,7 @@ class BrowserActivity : ComponentActivity() {
                     steamFeaturesEnabled = steamFeaturesEnabled,
                     showDetectorConsent = showDetectorConsent,
                     initialCsfloatQuarantine = initialQuarantine,
-                    initialCsfloatRestorationPending = steamFeaturesEnabled && pendingRestorationMarker.isFile,
+                    initialCsfloatRestorationPending = extensionEnabled && pendingRestorationMarker.isFile,
                     claimCsfloatOperation = { claimCsfloatOperation(profileId) },
                     ownsCsfloatOperation = { token -> ownsCsfloatOperation(profileId, token) },
                     releaseCsfloatOperation = { token -> releaseCsfloatOperation(profileId, token) },
@@ -161,6 +167,7 @@ class BrowserActivity : ComponentActivity() {
             if (shutdownRequested) return
             shutdownRequested = true
             val runtime = sharedRuntime
+            BrowserExtensionNotifications.current?.close()
             if (runtime == null) {
                 Process.killProcess(Process.myPid())
                 return

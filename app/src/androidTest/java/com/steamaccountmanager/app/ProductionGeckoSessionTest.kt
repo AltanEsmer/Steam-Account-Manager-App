@@ -8,6 +8,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.steamaccountmanager.app.browser.BrowserProcessController
+import com.steamaccountmanager.app.browser.BrowserExtensionPackages
+import com.steamaccountmanager.app.domain.model.BuiltInWebsites
 import com.steamaccountmanager.app.browser.GeckoProfileIdentity
 import com.steamaccountmanager.app.browser.SteamLoginDetector
 import com.steamaccountmanager.app.domain.model.SessionIdentifier
@@ -625,6 +627,175 @@ class ProductionGeckoSessionTest {
         } finally {
             stopBrowserWorker(context)
         }
+    }
+
+    @Test
+    fun marketplaceExtensionsRequireConsentOpenOfficialPopupsAndPersistInIsolation() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val selected = InstrumentationRegistry.getArguments().getString("extensionWebsite")
+        val sites = listOf("csfloat", "csmoney", "skins_com").filter { selected == null || it == selected }
+        val run = UUID.randomUUID().toString()
+        val server = LoopbackFixture(run.replace("-", ""))
+        server.start()
+        try {
+            for (websiteId in sites) {
+                val pkg = requireNotNull(BrowserExtensionPackages.forWebsite(websiteId))
+                val website = BuiltInWebsites.all.single { it.id == websiteId }
+                val a = SessionIdentifier("extension-a-$run", websiteId)
+                val b = SessionIdentifier("extension-b-$run", websiteId)
+                val domains = listOf(LOOPBACK_HOST, website.domain) + website.allowedAuthDomains
+                suspend fun openProfile(id: SessionIdentifier) =
+                    BrowserProcessController.openWebsite(context, id, server.url("EXTENSION"), domains)
+                stopBrowserWorker(context)
+                openProfile(a)
+                waitForTextContaining(automation, "${pkg.NAME}: absent")
+                assertFalse("Marketplace incorrectly requested profile detector consent", hasExactText(automation, "Allow Steam profile detection?"))
+                clickText(automation, "Install ${pkg.NAME}")
+                waitForText(automation, "Install-time ${pkg.NAME} access request")
+                capturePublicProof(context, automation, "$websiteId-consent")
+                clickText(automation, "Deny ${pkg.NAME} access")
+                waitForTextContaining(automation, "${pkg.NAME}: consent denied; extension absent")
+                clickText(automation, "Install ${pkg.NAME}")
+                waitForText(automation, "Install-time ${pkg.NAME} access request")
+                val needsAndroidNotificationConsent = websiteId == "csmoney" && android.os.Build.VERSION.SDK_INT >= 33 &&
+                    context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                clickText(automation, "Accept ${pkg.NAME} access")
+                if (needsAndroidNotificationConsent) {
+                    waitForText(automation, "Allow")
+                    clickText(automation, "Allow")
+                }
+                waitForTextContaining(automation, "${pkg.NAME}: enabled (${pkg.VERSION}, signed)")
+                capturePublicProof(context, automation, "$websiteId-enabled")
+                if (websiteId == "skins_com") {
+                    clickText(automation, "Test revoke Steam API access")
+                    waitForTextContaining(automation, "Skins.com: Steam API access removed")
+                }
+                clickText(automation, "Open ${pkg.NAME}")
+                waitForTextContaining(automation, when (websiteId) {
+                    "csmoney" -> "SIGN IN VIA STEAM"
+                    "skins_com" -> "Log in"
+                    else -> "Offer Tracking Enabled"
+                })
+                capturePublicProof(context, automation, "$websiteId-popup")
+                if (websiteId == "csmoney") {
+                    repeat(3) {
+                        val button = requireNotNull(findExactText(automation.rootInActiveWindow, "SIGN IN VIA STEAM"))
+                        val bounds = android.graphics.Rect().also { button.getBoundsInScreen(it) }
+                        button.recycle()
+                        val windowBounds = android.graphics.Rect().also { automation.rootInActiveWindow.getBoundsInScreen(it) }
+                        // GV153 popup nodes include the dialog inset twice on this API36 emulator.
+                        bounds.offset(-windowBounds.left, -windowBounds.top)
+                        val down = SystemClock.uptimeMillis()
+                        for (action in listOf(android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_UP)) {
+                            val event = android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), action,
+                                bounds.centerX().toFloat(), bounds.centerY().toFloat(), 0)
+                            event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                            assertTrue(automation.injectInputEvent(event, true))
+                            event.recycle()
+                            SystemClock.sleep(100)
+                        }
+                        SystemClock.sleep(2_000)
+                        try {
+                            waitForTextToDisappear(automation, "SIGN IN VIA STEAM")
+                            waitForTextContaining(automation, "Sign in")
+                        } finally {
+                            capturePublicProof(context, automation, "csmoney-login-helper")
+                        }
+                        assertTrue(automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+                        clickText(automation, "Open CS.MONEY")
+                        waitForText(automation, "SIGN IN VIA STEAM")
+                    }
+                }
+                if (websiteId == "skins_com") {
+                    waitForText(automation, "Enable")
+                    assertTrue(automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+                    clickText(automation, "Website access")
+                    waitForText(automation, "Skins.com website access")
+                    capturePublicProof(context, automation, "skins_com-host-consent")
+                    assertTrue(automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+                    clickText(automation, "Open Skins.com")
+                    waitForText(automation, "Enable")
+                    assertTrue(automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+                    clickText(automation, "Website access")
+                    clickText(automation, "Allow listed websites")
+                    waitForTextContaining(automation, "Skins.com: website access allowed")
+                    clickText(automation, "Open Skins.com")
+                    waitForText(automation, "Log in")
+                    assertFalse("Host access was not restored", hasExactText(automation, "Enable"))
+                }
+                assertTrue(automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+                waitForTextContaining(automation, "${pkg.NAME}: official popup opened")
+                openProfile(b)
+                waitForTextContaining(automation, "${pkg.NAME}: absent")
+                clickText(automation, "Install ${pkg.NAME}")
+                waitForText(automation, "Install-time ${pkg.NAME} access request")
+                clickText(automation, "Accept ${pkg.NAME} access")
+                waitForTextContaining(automation, "${pkg.NAME}: enabled (${pkg.VERSION}, signed)")
+                openProfile(a)
+                waitForTextContaining(automation, "${pkg.NAME}: enabled (${pkg.VERSION}, signed)")
+                clickText(automation, "Disable ${pkg.NAME}")
+                waitForTextContaining(automation, "${pkg.NAME}: disabled")
+                openProfile(b)
+                waitForTextContaining(automation, "${pkg.NAME}: enabled (${pkg.VERSION}, signed)")
+                stopBrowserWorker(context)
+                openProfile(a)
+                waitForTextContaining(automation, "${pkg.NAME}: disabled")
+                clickText(automation, "Enable ${pkg.NAME}")
+                waitForTextContaining(automation, "${pkg.NAME}: enabled (${pkg.VERSION}, signed)")
+                clickText(automation, "Uninstall ${pkg.NAME}")
+                waitForTextContaining(automation, "${pkg.NAME}: absent; browsing restored.")
+                clickText(automation, "Install ${pkg.NAME}")
+                waitForText(automation, "Install-time ${pkg.NAME} access request")
+                clickText(automation, "Accept ${pkg.NAME} access")
+                waitForTextContaining(automation, "${pkg.NAME}: enabled (${pkg.VERSION}, signed)")
+                openProfile(b)
+                waitForTextContaining(automation, "${pkg.NAME}: enabled (${pkg.VERSION}, signed)")
+                assertOneBrowserWorker(context)
+            }
+        } finally {
+            stopBrowserWorker(context)
+            server.close()
+        }
+    }
+
+    @Test
+    fun supportedPublicWebsitesOpenThroughGecko() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val selected = InstrumentationRegistry.getArguments().getString("siteWebsite")
+        val sites = BuiltInWebsites.all.map { Triple(it.id, it.url, listOf(it.domain) + it.allowedAuthDomains) } +
+            Triple("custom_https", "https://example.com/", listOf("example.com"))
+        val failedSites = mutableListOf<String>()
+        try {
+            for ((id, url, domains) in sites.filter { selected == null || it.first == selected }) {
+                val profile = SessionIdentifier("public-site-${UUID.randomUUID()}", id)
+                BrowserProcessController.openWebsite(context, profile, url, domains)
+                if (id == "steam") {
+                    waitForText(automation, "Allow Steam profile detection?")
+                    clickText(automation, "Allow and continue")
+                }
+                val loaded = waitUntil(60_000) { hasExactText(automation, "Gecko page: ready") }
+                SystemClock.sleep(1_500)
+                capturePublicProof(context, automation, "site-$id")
+                if (!loaded) failedSites.add(id)
+                assertOneBrowserWorker(context)
+            }
+            assertTrue("Public websites did not finish loading: $failedSites", failedSites.isEmpty())
+        } finally {
+            stopBrowserWorker(context)
+        }
+    }
+
+    private fun capturePublicProof(context: Context, automation: android.app.UiAutomation, name: String) {
+        val directory = java.io.File(context.getExternalFilesDir(null), "verification").apply { mkdirs() }
+        val bitmap = requireNotNull(automation.takeScreenshot())
+        java.io.File(directory, "$name.png").outputStream().use {
+            assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it))
+        }
+        bitmap.recycle()
     }
 
     private suspend fun open(context: Context, sessionId: SessionIdentifier, url: String) {

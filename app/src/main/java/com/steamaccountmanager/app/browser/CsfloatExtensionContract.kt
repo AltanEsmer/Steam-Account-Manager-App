@@ -7,15 +7,17 @@ import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-object CsfloatExtensionContract {
-    const val XPI_URL =
-        "https://addons.mozilla.org/firefox/downloads/file/4957680/csgofloat-5.17.0.xpi"
-    const val ID = "{194d0dc6-7ada-41c6-88b8-95d7636fe43c}"
-    const val VERSION = "5.17.0"
-    const val SIGNED_STATE = 2
-    const val SIZE_BYTES = 7_011_169L
-    const val SHA256 = "70C540B8B1DF125596EF615FE37028542DE4D92B3816AD81EB6AD5CE3D11798D"
-    private const val POPUP_PATH = "src/popup.html"
+/** Only immutable publisher packages belong here; Chrome CRX files are not Firefox packages. */
+open class BrowserExtensionPackage(
+    val NAME: String,
+    val ID: String,
+    val VERSION: String,
+    val XPI_URL: String,
+    val SIZE_BYTES: Long,
+    val SHA256: String,
+    private val POPUP_PATH: String,
+) {
+    val SIGNED_STATE = 2
 
     fun isExpected(id: String?, version: String?, signedState: Int): Boolean =
         id == ID && version == VERSION && signedState == SIGNED_STATE
@@ -55,7 +57,7 @@ object CsfloatExtensionContract {
     }.joinToString("\n")
 
     suspend fun downloadVerified(directory: File): File = withContext(Dispatchers.IO) {
-        val target = File.createTempFile("csfloat-5.17.0-", ".xpi", directory)
+        val target = File.createTempFile("verified-extension-", ".xpi", directory)
         try {
             val digest = MessageDigest.getInstance("SHA-256")
             var size = 0L
@@ -70,19 +72,48 @@ object CsfloatExtensionContract {
                         val count = input.read(buffer)
                         if (count < 0) break
                         size += count
-                        if (size > SIZE_BYTES) error("CSFLOAT_ARTIFACT_MISMATCH")
+                        if (size > SIZE_BYTES) error("EXTENSION_ARTIFACT_MISMATCH")
                         digest.update(buffer, 0, count)
                         output.write(buffer, 0, count)
                     }
                 }
             }
             val hash = digest.digest().joinToString("") { "%02X".format(it) }
-            if (!artifactMatches(size, hash)) error("CSFLOAT_ARTIFACT_MISMATCH")
+            if (!artifactMatches(size, hash)) error("EXTENSION_ARTIFACT_MISMATCH")
             target
         } catch (failure: Exception) {
             target.delete()
             throw failure
         }
+    }
+}
+
+object CsfloatExtensionContract : BrowserExtensionPackage(
+    "CSFloat", "{194d0dc6-7ada-41c6-88b8-95d7636fe43c}", "5.17.0",
+    "https://addons.mozilla.org/firefox/downloads/file/4957680/csgofloat-5.17.0.xpi",
+    7_011_169L, "70C540B8B1DF125596EF615FE37028542DE4D92B3816AD81EB6AD5CE3D11798D",
+    "src/popup.html",
+)
+
+object BrowserExtensionPackages {
+    val CSMONEY = BrowserExtensionPackage(
+        "CS.MONEY", "market@csmoney.com", "5.0.3",
+        "https://addons.mozilla.org/firefox/downloads/file/4978360/cs_money-5.0.3.xpi",
+        1_273_072L, "B1E41D89D25ECF275F3F44B00E7100E7BA32F1B438525D62DFE7C0DBD1AC420F",
+        "index.html",
+    )
+    val SKINS = BrowserExtensionPackage(
+        "Skins.com", "skinscom-p2p-extension@skins.com", "1.0.7",
+        "https://addons.mozilla.org/firefox/downloads/file/4898295/skins_com-1.0.7.xpi",
+        127_158L, "E1E33979B713FC32517B547C19477F5F8625FC88BBE0DACB0AEDF2E35D6DC513",
+        "src/popup/popup.html",
+    )
+
+    fun forWebsite(websiteId: String): BrowserExtensionPackage? = when (websiteId) {
+        "steam", "csfloat" -> CsfloatExtensionContract
+        "csmoney" -> CSMONEY
+        "skins_com" -> SKINS
+        else -> null
     }
 }
 
