@@ -7,6 +7,20 @@ import org.junit.Test
 
 class CsfloatExtensionContractTest {
     @Test
+    fun trackingContractDistinguishesEveryTruthfulPublicState() {
+        assertEquals("CSFloat tracking: active", csfloatTrackingMessage(CsfloatTrackingState.ACTIVE))
+        assertEquals("CSFloat tracking: inactive", csfloatTrackingMessage(CsfloatTrackingState.INACTIVE))
+        assertEquals(
+            "CSFloat tracking: unknown; inspect the official popup.",
+            csfloatTrackingMessage(CsfloatTrackingState.UNKNOWN),
+        )
+        assertEquals(
+            "CSFloat tracking: failed; retry inspection.",
+            csfloatTrackingMessage(CsfloatTrackingState.FAILED),
+        )
+    }
+
+    @Test
     fun popupStateNeverClaimsTrackingIsActive() {
         val popup = CsfloatPopupStatus()
         assertEquals(CsfloatPopupState.UNAVAILABLE, popup.state)
