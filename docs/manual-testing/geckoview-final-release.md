@@ -6,6 +6,37 @@ APK/hash in [the final verification receipt](../verification/geckoview-issue-12-
 Do not send passwords, Steam Guard codes, cookies, tokens, account names/IDs,
 trade contents or screenshots of signed-in pages.
 
+## Full release APK for Dagkan's testing
+
+`SAMApp-geckoview-universal-release-test-signed.apk` is the full optimized release
+build, signed with the local Android debug certificate solely to make testing
+possible. It includes armeabi-v7a, arm64-v8a and x86_64, has production application ID
+`com.steamaccountmanager.app`, and has no debug controls. Size: 529,209,078 bytes
+(529.2 MB). SHA-256:
+
+```text
+896DD06DEBBBAF5FBDE22B4D33A018855F69C26D4FC215F521560930BE721FBF
+```
+
+Copy this APK to the test phone, open it in Files, allow installation from that
+source if Android asks, install, and open Steam Account Manager. It can coexist
+with the campaign `.debug` app, but their saved data is separate. If an existing
+production app uses a different signing certificate, Android will reject this
+test APK as an update. Keep that installation and its data; use a spare device
+or Android user profile instead. Do not uninstall a real installation to bypass
+the certificate mismatch. The maintainer must sign the final distributed APK
+with the existing release key.
+
+For a fresh release-build check, use this APK and follow steps 2–8 below. The
+upgrade/persistence check in step 1 still uses the Samsung debug candidate over
+the prior campaign debug app. Mark that check UNTESTED if only the fresh release
+build is tested. Signature, alignment and every ZIP payload were verified; the
+37/38 emulator result belongs to the debug test build, not this signed release APK.
+
+The developer cannot perform the final phone test now. Dagkan will perform the
+remaining acceptance checks; the developer will handle taking the PR out of Draft.
+Screenshot review alone does not establish authenticated or physical-device success.
+
 ## Steps
 
 1. **Install the candidate APK.** Install the supplied Samsung debug APK over the
@@ -77,5 +108,7 @@ Overall: PASS / FAIL / INCOMPLETE
 
 Trade Token Sync is outside this release and tracked in
 [#17](https://github.com/D4gkan/Steam-Account-Manager-App/issues/17).
-The PR remains Draft until required physical-device acceptance and final independent
-checks pass. Merge and public APK publication are later maintainer actions.
+The developer will decide when to take the PR out of Draft, and Dagkan will decide
+on merge and perform the deferred testing. Keep unverified checks visible and
+#12/#3 open until acceptance is recorded. Public APK publication requires the
+maintainer's release signature and acceptance decision.

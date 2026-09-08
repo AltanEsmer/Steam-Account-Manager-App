@@ -303,7 +303,30 @@ revocation, lock and offline recovery checks. Report unavailable workflows as
 UNTESTED. Only the active profile has a worker; simultaneous all-account or
 force-stopped tracking is not promised.
 
-Final maintainer sequence: complete the exact-candidate Samsung result, resolve
-any remaining live-site failure, obtain final acceptance review, confirm branch/PR
-SHA parity, close #12/#3, convert #14 to ready, then request merge and configure
-release signing/public APK publication. No merge or public release has happened.
+## Maintainer handoff update — 2026-09-08
+
+The developer cannot test on the phone now and will handle taking PR #14 out of
+Draft. Dagkan will review the embedded emulator gallery, decide on merge, and
+perform the remaining physical-device and authenticated checks. This changes
+test ownership and sequencing; it does not turn unverified checks into passes.
+Keep #12/#3 open until acceptance is recorded. CSGOEmpire remains a recorded
+timeout and must be checked on a working network.
+
+The full universal release build is now also available locally as
+`releases/SAMApp-geckoview-universal-release-test-signed.apk` (529,209,078 bytes),
+signed with the Android debug certificate for installation and testing only.
+SHA-256: `896DD06DEBBBAF5FBDE22B4D33A018855F69C26D4FC215F521560930BE721FBF`.
+The certificate SHA-256 is
+`DC99994A7CB9F7CC3D4BF2AEF67C463A4CD091E1ECA6924067B62296958B026D`.
+`apksigner verify` passes with v3; `zipalign -c -P 16 4` passes. All original ZIP entries
+and their uncompressed SHA-256 values match the original unsigned universal
+release, whose hash remains in the artifact table above. Only signing metadata was added; no source or original packaged
+payload was changed. The APK includes armeabi-v7a, arm64-v8a and x86_64, has
+production ID `com.steamaccountmanager.app`, and is not debuggable.
+
+The signed release artifact has not been run through the debug instrumentation
+suite. Its install and runtime acceptance are part of Dagkan's remaining checks.
+It cannot update an app signed with another key; preserve existing data and use
+a separate test device/user profile if necessary. See the updated
+[installation and eight-step guide](../manual-testing/geckoview-final-release.md).
+No official release has been published or merge performed by this agent.
