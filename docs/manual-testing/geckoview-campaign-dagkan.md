@@ -1,3 +1,5 @@
+For the final three-extension candidate, use [Final Samsung verification](geckoview-final-release.md).
+
 # GeckoView campaign manual testing for Dagkan
 
 ## Device-test release check

@@ -47,8 +47,8 @@ GeckoView and the CSFloat extension will be pinned to versions that pass the
 compatibility contract. Either dependency changing is a security-sensitive upgrade
 that requires the contract to be rerun.
 
-The first GeckoView release supports only the official CSFloat extension as a
-third-party browser extension. Arbitrary user-installed extensions and an extension
+The original compatibility gate supports the official CSFloat extension. The
+2026-09-08 scope update below adds two fixed official Firefox packages to the release candidate; their final device acceptance remains required. Arbitrary user-installed extensions and an extension
 marketplace remain out of scope. A fixed app-owned Steam profile detector may use a
 built-in WebExtension solely as the GeckoView bridge for the existing public
 avatar/profile feature; it is application code bundled with the APK, not a supported
@@ -184,3 +184,73 @@ and `window.close` compatibility. Those limits remain production verification wo
 - [Official CSFloat Firefox Android listing](https://addons.mozilla.org/en-US/android/addon/csgofloat/)
 - [Official CSFloat Firefox manifest conversion](https://github.com/csfloat/extension/blob/master/webpack.config.js)
 - [CSFloat extension source](https://github.com/csfloat/extension)
+
+## Final cutover and release scope (2026-09-08)
+
+The developer requested CS.MONEY and Skins.com support in addition to CSFloat, then
+explicitly approved deferring Trade Token Sync to [#17](https://github.com/D4gkan/Steam-Account-Manager-App/issues/17)
+until a publisher-issued Firefox package exists. This supersedes the original
+CSFloat-only release scope, without permitting arbitrary extensions, repackaged
+Chrome extensions, silent grants, or a second browser engine.
+
+Every supported website now uses `BrowserActivity` and `GeckoBrowserScreen`.
+`BrowserProcessController` authorizes the selected pair and shuts down the prior
+browser worker before opening another persistent Gecko profile. Launch authorization
+is durably revoked before shutdown so Android cannot recreate an authorized old
+foreground profile after a forced kill. Only confirmed death permits authorizing
+the next profile. One dedicated
+worker/runtime is active at a time. Room remains metadata-only; no schema or
+browser-cookie migration is introduced. There is no production WebView fallback,
+WebView data-directory suffix, WebView restart receiver, or AndroidX WebKit dependency.
+Rollback means reverting the release change set.
+
+The fixed package mapping is CSFloat for Steam and CSFloat website profiles,
+CS.MONEY for CS.MONEY profiles, and Skins.com Marketplace for Skins.com profiles.
+CSGOEmpire and custom HTTPS sites receive the same Gecko shell without extension
+controls. The Steam profile detector and its versioned pre-runtime consent remain
+Steam-only. Signing in under Steam does not sign in another website profile.
+
+| Package | ID | Version | Official AMO file | SHA-256 |
+| --- | --- | --- | --- | --- |
+| CSFloat | `{194d0dc6-7ada-41c6-88b8-95d7636fe43c}` | 5.17.0 | 4957680 | `70C540B8B1DF125596EF615FE37028542DE4D92B3816AD81EB6AD5CE3D11798D` |
+| CS.MONEY | `market@csmoney.com` | 5.0.3 | 4978360 | `B1E41D89D25ECF275F3F44B00E7100E7BA32F1B438525D62DFE7C0DBD1AC420F` |
+| Skins.com | `skinscom-p2p-extension@skins.com` | 1.0.7 | 4898295 | `E1E33979B713FC32517B547C19477F5F8625FC88BBE0DACB0AEDF2E35D6DC513` |
+
+All three use checksum/length verification before Gecko installation, then exact
+ID/version/signed-state verification. Callback-derived install prompts disclose
+permissions, origins and data collection. Optional technical/interaction collection
+and private mode are not granted by installing. Additional package permission
+requests require a separate explicit prompt; dismissal denies them. Disable or
+uninstall revokes all access for the selected profile. No automatic package update
+advances these pins.
+
+Official popups use GeckoView's native `Action.click` / `ActionDelegate` path so the
+engine sets the extension-popup context and script-close behavior. New helper tabs
+are returned unopened; GeckoView owns their opening, and the app presents them
+only after the first page-start callback. Delayed closes recheck the originating
+session identity so an old popup cannot close a newer login helper.
+
+The app's Website access control lists the package's declared optional origins and
+requires an explicit grant or revoke. Grant restoration and revocation are durable,
+fail-closed operations checked against Gecko's resulting permission metadata.
+CS.MONEY can request Android notification permission after extension consent.
+Native alerts contain a generic extension name/status only, coalesce to one alert,
+and disappear when the profile shuts down. They open the app; they do not disclose
+trade payloads or promise background operation for inactive profiles.
+
+Extension login and refresh helper tabs share only the selected runtime/profile.
+At most two helper tabs are retained; inactive refresh helpers expire after 30 seconds.
+Visible helper tabs use the same navigation policy and external/error recovery.
+Changing a browser/package pin, its source/permissions or the supported Android
+range requires repeating GV-02 through GV-16 for every affected package on emulator
+and physical device, including optional-host grant/deny, login/helper navigation,
+background refresh, revocation, isolation and persistence. Tests of unauthenticated
+popups do not establish authenticated trade, notification or long-duration tracking
+compatibility.
+
+Existing WebView sign-ins cannot be migrated. Users must sign in again once for
+each affected browser session. The app must never collect passwords, Steam Guard
+codes, cookies/tokens, inventory/trade contents or identifying proof screenshots.
+Signing credentials remain local and excluded from source control. Without configured
+release signing, Gradle produces an unsigned release APK for build verification;
+that file cannot be published as an installable signed release.
