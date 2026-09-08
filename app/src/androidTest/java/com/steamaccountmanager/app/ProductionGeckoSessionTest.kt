@@ -780,8 +780,8 @@ class ProductionGeckoSessionTest {
             waitForText(automation, marker("B", "B", "B", "B"))
             assertPriorGenerationGone(context, oldGeneration)
             assertOneBrowserWorker(context)
-            openProfile(a, "A")
-            waitForText(automation, marker("A", "A", "A", "A"))
+            openProfile(a, "A-return")
+            waitForText(automation, marker("A-return", "A", "A", "A"))
             assertOneBrowserWorker(context)
         } finally {
             stopBrowserWorker(context)
