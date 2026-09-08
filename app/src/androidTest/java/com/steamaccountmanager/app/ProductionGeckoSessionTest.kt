@@ -697,12 +697,8 @@ class ProductionGeckoSessionTest {
                             SystemClock.sleep(100)
                         }
                         SystemClock.sleep(2_000)
-                        try {
-                            waitForTextToDisappear(automation, "SIGN IN VIA STEAM")
-                            waitForTextContaining(automation, "Sign in")
-                        } finally {
-                            capturePublicProof(context, automation, "csmoney-login-helper")
-                        }
+                        waitForTextToDisappear(automation, "SIGN IN VIA STEAM")
+                        waitForTextContaining(automation, "Sign in")
                         assertTrue(automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
                         clickText(automation, "Open CS.MONEY")
                         waitForText(automation, "SIGN IN VIA STEAM")
@@ -761,6 +757,39 @@ class ProductionGeckoSessionTest {
     }
 
     @Test
+    fun forcedShutdownCannotResurrectThePreviousProfile() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext
+        val automation = instrumentation.uiAutomation
+        val run = UUID.randomUUID().toString().replace("-", "")
+        val server = LoopbackFixture(run)
+        val a = SessionIdentifier("forced-a-$run", "csmoney")
+        val b = SessionIdentifier("forced-b-$run", "csmoney")
+        suspend fun openProfile(id: SessionIdentifier, slot: String) =
+            BrowserProcessController.openWebsite(context, id, server.url(slot), listOf(LOOPBACK_HOST))
+        server.start()
+        try {
+            stopBrowserWorker(context)
+            openProfile(a, "A")
+            waitForText(automation, marker("A", "A", "A", "A"))
+            val oldGeneration = browserProcesses(context).associate { it.pid to it.processName }
+            clickText(automation, "Test unresponsive browser worker")
+            SystemClock.sleep(500)
+            // Route from this process without querying accessibility on the deliberately stalled worker.
+            openProfile(b, "B")
+            waitForText(automation, marker("B", "B", "B", "B"))
+            assertPriorGenerationGone(context, oldGeneration)
+            assertOneBrowserWorker(context)
+            openProfile(a, "A")
+            waitForText(automation, marker("A", "A", "A", "A"))
+            assertOneBrowserWorker(context)
+        } finally {
+            stopBrowserWorker(context)
+            server.close()
+        }
+    }
+
+    @Test
     fun supportedPublicWebsitesOpenThroughGecko() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext
@@ -779,7 +808,8 @@ class ProductionGeckoSessionTest {
                 }
                 val loaded = waitUntil(60_000) { hasExactText(automation, "Gecko page: ready") }
                 SystemClock.sleep(1_500)
-                capturePublicProof(context, automation, "site-$id")
+                // Steam's login page can contain a live QR payload; do not capture authentication UI.
+                if (id != "steam") capturePublicProof(context, automation, "site-$id")
                 if (!loaded) failedSites.add(id)
                 assertOneBrowserWorker(context)
             }
@@ -790,6 +820,8 @@ class ProductionGeckoSessionTest {
     }
 
     private fun capturePublicProof(context: Context, automation: android.app.UiAutomation, name: String) {
+        // Accessibility labels can arrive before Gecko's first rendered frame/dialog animation.
+        SystemClock.sleep(1_000)
         val directory = java.io.File(context.getExternalFilesDir(null), "verification").apply { mkdirs() }
         val bitmap = requireNotNull(automation.takeScreenshot())
         java.io.File(directory, "$name.png").outputStream().use {

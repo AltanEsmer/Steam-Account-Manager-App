@@ -1347,6 +1347,9 @@ fun GeckoBrowserScreen(
                     }
                     if (debugBuild) {
                         TextButton(onClick = {
+                            Handler(Looper.getMainLooper()).postDelayed({ Thread.sleep(15_000) }, 100)
+                        }) { Text("Test unresponsive browser worker") }
+                        TextButton(onClick = {
                             val activity = context.findActivity() ?: return@TextButton
                             csfloatState = "${extensionName}: recreating activity…"
                             activity.intent.putExtra(DEBUG_ACTIVITY_RECREATED, true)

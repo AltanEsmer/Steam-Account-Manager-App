@@ -35,6 +35,8 @@ class BrowserActivity : ComponentActivity() {
             Log.e(TAG, "BrowserActivity rejected an incomplete or stale browser-session request.")
             super.onCreate(savedInstanceState)
             finish()
+            // A stale top-activity recreation must not leave an empty replacement worker resident.
+            if (sharedRuntime == null) Process.killProcess(Process.myPid())
             return
         }
 

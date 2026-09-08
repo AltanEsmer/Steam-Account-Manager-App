@@ -132,7 +132,7 @@ object BrowserProcessController {
                 processes.any { it.processName == browserWorkerName(appContext) } ->
                     requestShutdownAndAwaitDeath(appContext, processes)
                 processes.isNotEmpty() -> terminateCapturedChildrenAndAwaitDeath(appContext, processes)
-                else -> true
+                else -> revokeLaunchAuthorization(appContext)
             }
         }
         if (stopped) {
@@ -165,6 +165,8 @@ object BrowserProcessController {
         oldGeneration: List<ActivityManager.RunningAppProcessInfo>,
     ): Boolean {
         val oldWorker = oldGeneration.singleOrNull { it.processName == browserWorkerName(context) } ?: return false
+        // Android may recreate a killed foreground activity. Its old token must already be invalid.
+        if (!revokeLaunchAuthorization(context)) return false
         context.sendBroadcast(
             Intent(context, BrowserShutdownReceiver::class.java).setAction(ACTION_SHUTDOWN_BROWSER_PROCESS),
         )
@@ -211,6 +213,7 @@ object BrowserProcessController {
         context: Context,
         oldGeneration: List<ActivityManager.RunningAppProcessInfo>,
     ): Boolean {
+        if (!revokeLaunchAuthorization(context)) return false
         val deadline = System.currentTimeMillis() + SHUTDOWN_TIMEOUT_MS
         var stableEmptyPolls = 0
         while (System.currentTimeMillis() < deadline) {
@@ -249,6 +252,12 @@ object BrowserProcessController {
         }
         return browserProcesses(context).any { it.processName == workerName }
     }
+
+    private fun revokeLaunchAuthorization(context: Context): Boolean =
+        context.getSharedPreferences(ROUTER_PREFS, Context.MODE_PRIVATE).edit()
+            .remove(KEY_ACTIVE_SESSION)
+            .remove(KEY_ROUTING_TOKEN)
+            .commit()
 
     private fun clearLaunchAuthorization(context: Context, routingToken: String) {
         val prefs = context.getSharedPreferences(ROUTER_PREFS, Context.MODE_PRIVATE)
