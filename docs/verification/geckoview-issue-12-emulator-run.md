@@ -1,6 +1,6 @@
 # Issue #12 final cutover verification
 
-Status: **INCOMPLETE — 37/38 emulator tests pass; CSGOEmpire and final Samsung acceptance remain open.**
+Status: **Physical-device/authenticated acceptance pending. Original full run: 37/38; the previously failed website matrix now passes on unchanged APKs (2026-09-08 rerun below).**
 
 The first full independent run rejected the earlier candidate. The APK table below
 identifies the corrected candidate. Its full independent run completed with one
@@ -309,8 +309,8 @@ The developer cannot test on the phone now and will handle taking PR #14 out of
 Draft. Dagkan will review the embedded emulator gallery, decide on merge, and
 perform the remaining physical-device and authenticated checks. This changes
 test ownership and sequencing; it does not turn unverified checks into passes.
-Keep #12/#3 open until acceptance is recorded. CSGOEmpire remains a recorded
-timeout and must be checked on a working network.
+Keep #12/#3 open until acceptance is recorded. The original CSGOEmpire timeout is retained as historical evidence; the
+subsequent emulator rerun below now passes. Final phone acceptance remains pending.
 
 The full universal release build is now also available locally as
 `releases/SAMApp-geckoview-universal-release-test-signed.apk` (529,209,078 bytes),
@@ -330,3 +330,41 @@ It cannot update an app signed with another key; preserve existing data and use
 a separate test device/user profile if necessary. See the updated
 [installation and eight-step guide](../manual-testing/geckoview-final-release.md).
 No official release has been published or merge performed by this agent.
+
+## CSGOEmpire connection recheck — 2026-09-08, 18:44–18:47 CEST
+
+The earlier timeout no longer reproduces. A direct host request to the unchanged
+`https://csgoempire.com/` URL returned HTTP 200 in 0.164 seconds, with its public
+HTML and page title. The exact installed application and test APK hashes were
+checked against the hashes above before rerunning the existing tests on the same
+API 36 AVD with `-gpu host` and 4096 MiB RAM.
+
+- Focused CSGOEmpire site check: **PASS**, 8.65 seconds.
+- Complete six-site public matrix: **PASS**, 41.948 seconds. Steam, CSFloat,
+  CS.MONEY, Skins.com, CSGOEmpire and the custom HTTPS page all reached page-ready.
+- The new original screenshot shows CSGOEmpire rendered and logged out. No
+  application code, website URL, timeout, DNS setting or allowlist was changed.
+
+This supports a temporary site or network-path problem during the earlier run.
+The saved earlier diagnostics cannot distinguish an upstream outage from routing,
+filtering or a connection stall, so a more specific root cause is not claimed.
+There was no established application defect to patch; increasing the timeout or
+changing domains was not necessary for this passing rerun.
+
+The original full-suite result remains **37/38**. The failed matrix test has now
+passed independently; this is not a claim of a fresh 38/38 full-suite run. The
+physical-device and authenticated workflows are still awaiting Dagkan's testing.
+The full release testing APK is unchanged.
+
+![CSGOEmpire rendered in the emulator after connection recovery](evidence/issue-12/site-csgoempire-recheck.png)
+
+[Machine-readable rerun receipt and proof hash](evidence/issue-12/csgoempire-recheck.json).
+The original timeout screenshot and full-run result JSON are preserved.
+
+Reproduce the focused check using the existing APKs:
+
+```powershell
+& "$env:ANDROID_HOME\platform-tools\adb.exe" -s emulator-5580 shell am instrument -w -e class 'com.steamaccountmanager.app.ProductionGeckoSessionTest#supportedPublicWebsitesOpenThroughGecko' -e siteWebsite csgoempire com.steamaccountmanager.app.debug.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Omit `-e siteWebsite csgoempire` to run the complete six-site matrix.
