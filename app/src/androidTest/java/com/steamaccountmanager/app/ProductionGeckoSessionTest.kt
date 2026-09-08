@@ -762,7 +762,7 @@ class ProductionGeckoSessionTest {
         val context = instrumentation.targetContext.applicationContext
         val automation = instrumentation.uiAutomation
         val run = UUID.randomUUID().toString().replace("-", "")
-        val server = LoopbackFixture(run)
+        val server = LoopbackFixture(run, persistentCookies = true)
         val a = SessionIdentifier("forced-a-$run", "csmoney")
         val b = SessionIdentifier("forced-b-$run", "csmoney")
         suspend fun openProfile(id: SessionIdentifier, slot: String) =
@@ -772,6 +772,10 @@ class ProductionGeckoSessionTest {
             stopBrowserWorker(context)
             openProfile(a, "A")
             waitForText(automation, marker("A", "A", "A", "A"))
+            // Establish durable state before simulating a crash; fresh writes may still be buffered.
+            stopBrowserWorker(context)
+            openProfile(a, "A-persisted")
+            waitForText(automation, marker("A-persisted", "A", "A", "A"))
             val oldGeneration = browserProcesses(context).associate { it.pid to it.processName }
             clickText(automation, "Test unresponsive browser worker")
             SystemClock.sleep(500)
@@ -992,7 +996,10 @@ class ProductionGeckoSessionTest {
         return condition()
     }
 
-    private class LoopbackFixture(private val runMarker: String) : Closeable {
+    private class LoopbackFixture(
+        private val runMarker: String,
+        private val persistentCookies: Boolean = false,
+    ) : Closeable {
         private val running = AtomicBoolean(false)
         private var server: ServerSocket? = null
         private var worker: Thread? = null
@@ -1084,12 +1091,13 @@ class ProductionGeckoSessionTest {
               const cookieName = 'prod_' + scope;
               const localKey = 'prod-local-' + scope;
               const cookieMatch = document.cookie.split('; ').find(v => v.startsWith(cookieName + '='));
-              if (!cookieMatch) document.cookie = cookieName + '=' + requested + '; Path=/; SameSite=Lax';
+              if (!cookieMatch) document.cookie = cookieName + '=' + requested + '; Path=/; SameSite=Lax${if (persistentCookies) "; Max-Age=86400" else ""}';
               if (!localStorage.getItem(localKey)) localStorage.setItem(localKey, requested);
               const database = indexedDB.open('prod-gecko-' + scope, 1);
               database.onupgradeneeded = () => database.result.createObjectStore('state');
               database.onsuccess = () => {
-                const store = database.result.transaction('state', 'readwrite').objectStore('state');
+                const transaction = database.result.transaction('state', 'readwrite');
+                const store = transaction.objectStore('state');
                 const read = store.get('value');
                 read.onsuccess = () => {
                   const idb = read.result || requested;
@@ -1098,8 +1106,10 @@ class ProductionGeckoSessionTest {
                   const local = localStorage.getItem(localKey) || 'missing';
                   const marker = 'PROD-GECKO|requested=' + requested + '|cookie=' + cookie +
                     '|local=' + local + '|idb=' + idb;
-                  document.title = /^(SHELL-|AUTH|RECOVERED)/.test(requested) ? 'PROD-GECKO|' + requested : marker;
-                  document.getElementById('marker').textContent = marker;
+                  transaction.oncomplete = () => {
+                    document.title = /^(SHELL-|AUTH|RECOVERED)/.test(requested) ? 'PROD-GECKO|' + requested : marker;
+                    document.getElementById('marker').textContent = marker;
+                  };
                 };
               };
             })();
