@@ -11,7 +11,7 @@ import com.steamaccountmanager.app.BrowserActivity
  * On receipt, it asks the active engine to flush and shut down before process death. The next time
  * [BrowserProcessController.openWebsite] starts [com.steamaccountmanager.app.BrowserActivity],
  * Android spins up a brand-new `:browser` process, which is then free to call
- * `WebView.setDataDirectorySuffix()` again for the newly-requested session.
+ * the next isolated Gecko profile is authorized.
  */
 class BrowserShutdownReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

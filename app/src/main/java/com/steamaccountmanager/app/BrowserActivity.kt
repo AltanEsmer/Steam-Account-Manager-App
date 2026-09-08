@@ -3,14 +3,11 @@ package com.steamaccountmanager.app
 import android.os.Bundle
 import android.os.Process
 import android.util.Log
-import android.webkit.CookieManager
-import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.steamaccountmanager.app.browser.BrowserProcessController
 import com.steamaccountmanager.app.browser.GeckoProfileIdentity
 import com.steamaccountmanager.app.domain.model.SessionIdentifier
-import com.steamaccountmanager.app.ui.browser.BrowserScreen
 import com.steamaccountmanager.app.ui.browser.GeckoBrowserScreen
 import com.steamaccountmanager.app.ui.theme.SteamAccountManagerTheme
 import org.mozilla.geckoview.GeckoRuntime
@@ -18,8 +15,7 @@ import org.mozilla.geckoview.GeckoRuntimeSettings
 import java.io.File
 
 /**
- * Hosts one browser session in the dedicated `:browser` process. Steam uses a
- * persistent Gecko profile; other websites retain the reversible WebView path.
+ * Hosts one isolated Gecko browser session in the dedicated `:browser` process.
  */
 class BrowserActivity : ComponentActivity() {
 
@@ -40,21 +36,7 @@ class BrowserActivity : ComponentActivity() {
             return
         }
 
-        if (websiteId != STEAM_WEBSITE_ID) {
-            val suffix = intent.getStringExtra(BrowserProcessController.EXTRA_DATA_DIR_SUFFIX)
-            if (suffix.isNullOrBlank()) {
-                Log.e(TAG, "BrowserActivity started without a WebView data directory suffix; finishing.")
-                super.onCreate(savedInstanceState)
-                finish()
-                return
-            }
-            // This remains before super.onCreate and before any WebView construction.
-            WebView.setDataDirectorySuffix(suffix)
-            super.onCreate(savedInstanceState)
-            showWebView(accountId, websiteId, startUrl, allowedDomains)
-            return
-        }
-
+        val steamFeaturesEnabled = usesSteamBrowserFeatures(websiteId)
         val profileId = GeckoProfileIdentity.idFor(sessionId)
         val profile = GeckoProfileIdentity.pathFor(File(noBackupFilesDir, GECKO_PROFILE_ROOT), sessionId)
         if ((!profile.exists() && !profile.mkdirs()) || !profile.isDirectory) {
@@ -81,10 +63,12 @@ class BrowserActivity : ComponentActivity() {
         }
 
         val consentPreferences = getSharedPreferences(DETECTOR_CONSENT_PREFERENCES, MODE_PRIVATE)
-        val showDetectorConsent = !consentPreferences.getBoolean(detectorConsentKey(profileId), false)
+        val showDetectorConsent = steamFeaturesEnabled &&
+            !consentPreferences.getBoolean(detectorConsentKey(profileId), false)
         val trustedMarker = File(profile, CSFLOAT_TRUSTED_MARKER)
         val pendingRestorationMarker = File(profile, CSFLOAT_PENDING_RESTORATION_MARKER)
-        val initialQuarantine = isCsfloatQuarantined(trustedMarker.isFile) || pendingRestorationMarker.isFile
+        val initialQuarantine = steamFeaturesEnabled &&
+            (isCsfloatQuarantined(trustedMarker.isFile) || pendingRestorationMarker.isFile)
 
         super.onCreate(savedInstanceState)
         setContent {
@@ -95,9 +79,10 @@ class BrowserActivity : ComponentActivity() {
                     websiteId = websiteId,
                     startUrl = startUrl,
                     allowedDomains = allowedDomains,
+                    steamFeaturesEnabled = steamFeaturesEnabled,
                     showDetectorConsent = showDetectorConsent,
                     initialCsfloatQuarantine = initialQuarantine,
-                    initialCsfloatRestorationPending = pendingRestorationMarker.isFile,
+                    initialCsfloatRestorationPending = steamFeaturesEnabled && pendingRestorationMarker.isFile,
                     claimCsfloatOperation = { claimCsfloatOperation(profileId) },
                     ownsCsfloatOperation = { token -> ownsCsfloatOperation(profileId, token) },
                     releaseCsfloatOperation = { token -> releaseCsfloatOperation(profileId, token) },
@@ -140,28 +125,8 @@ class BrowserActivity : ComponentActivity() {
         }
     }
 
-    private fun showWebView(
-        accountId: String,
-        websiteId: String,
-        startUrl: String,
-        allowedDomains: List<String>,
-    ) {
-        setContent {
-            SteamAccountManagerTheme {
-                BrowserScreen(
-                    accountId = accountId,
-                    websiteId = websiteId,
-                    startUrl = startUrl,
-                    allowedDomains = allowedDomains,
-                    onClose = { finish() },
-                )
-            }
-        }
-    }
-
     companion object {
         private const val TAG = "BrowserActivity"
-        private const val STEAM_WEBSITE_ID = "steam"
         private const val GECKO_PROFILE_ROOT = "gecko-browser-profiles"
         internal const val DETECTOR_CONSENT_PREFERENCES = "gecko_detector_consent"
         private const val DETECTOR_CONSENT_VERSION = "steam_profile_detector_consent_v2_"
@@ -197,8 +162,6 @@ class BrowserActivity : ComponentActivity() {
             shutdownRequested = true
             val runtime = sharedRuntime
             if (runtime == null) {
-                // Preserve the reversible WebView sessions while they remain in production.
-                CookieManager.getInstance().flush()
                 Process.killProcess(Process.myPid())
                 return
             }
@@ -216,6 +179,8 @@ class BrowserActivity : ComponentActivity() {
         }
     }
 }
+
+internal fun usesSteamBrowserFeatures(websiteId: String) = websiteId == "steam"
 
 internal fun tryPersistCsfloatQuarantine(persist: () -> Boolean): Boolean = try {
     persist()

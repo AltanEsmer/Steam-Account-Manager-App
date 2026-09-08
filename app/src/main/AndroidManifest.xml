@@ -21,9 +21,7 @@
 
         <!--
           MainActivity hosts all Compose UI (home, add account, website picker,
-          settings, app lock). It runs in the default process and never creates a
-          WebView itself, so it is never subject to WebView's per-process data
-          directory restriction.
+          settings, app lock). Browser engine work remains in the dedicated process.
         -->
         <activity
             android:name=".MainActivity"
@@ -38,9 +36,7 @@
         </activity>
 
         <!--
-          BrowserActivity runs one isolated browser session in :browser. Steam uses
-          the gate-approved persistent Gecko profile topology; other websites retain
-          WebView during the reversible migration. Switching sessions restarts this
+          BrowserActivity runs one isolated Gecko session in :browser. Switching sessions restarts this
           worker so only one engine-owned profile is resident at a time.
         -->
         <activity

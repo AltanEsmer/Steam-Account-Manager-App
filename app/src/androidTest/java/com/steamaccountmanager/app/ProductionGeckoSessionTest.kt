@@ -35,17 +35,16 @@ import org.junit.runner.RunWith
 class ProductionGeckoSessionTest {
 
     @Test
-    fun productionGeckoBrowserShellTraversesPolicyHistoryRecoveryAndClose() = runBlocking {
+    fun genericGeckoBrowserShellSkipsSteamFeaturesAndTraversesPolicyHistoryRecoveryAndClose() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext
         val automation = instrumentation.uiAutomation
         val runMarker = UUID.randomUUID().toString().replace("-", "")
-        val sessionId = SessionIdentifier("instrumentation-synthetic-shell-$runMarker", "steam")
+        val sessionId = SessionIdentifier("instrumentation-synthetic-shell-$runMarker", "custom_https")
         val server = LoopbackFixture(runMarker)
 
         try {
             stopBrowserWorker(context)
-            clearSyntheticDetectorConsent(context, sessionId)
             server.start()
             BrowserProcessController.openWebsite(
                 context = context,
@@ -53,9 +52,9 @@ class ProductionGeckoSessionTest {
                 targetUrl = server.url("SHELL-A"),
                 allowedDomains = listOf(LOOPBACK_HOST),
             )
-            waitForText(automation, "Allow Steam profile detection?")
-            clickText(automation, "Allow and continue")
             waitForText(automation, "PROD-GECKO|SHELL-A")
+            assertFalse("Generic site showed Steam detector consent", hasExactText(automation, "Allow Steam profile detection?"))
+            assertFalse("Generic site showed CSFloat controls", hasExactText(automation, "Install CSFloat"))
 
             clickText(automation, "Allowed page")
             waitForText(automation, "PROD-GECKO|SHELL-B")

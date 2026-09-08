@@ -73,7 +73,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-/** The production GeckoView surface for the built-in Steam browser journey. */
+/** The production GeckoView surface for every configured website. */
 @Composable
 fun GeckoBrowserScreen(
     getOrCreateRuntimeAfterConsent: () -> GeckoRuntime,
@@ -81,6 +81,7 @@ fun GeckoBrowserScreen(
     websiteId: String,
     startUrl: String,
     allowedDomains: List<String>,
+    steamFeaturesEnabled: Boolean,
     showDetectorConsent: Boolean,
     initialCsfloatQuarantine: Boolean,
     initialCsfloatRestorationPending: Boolean,
@@ -142,10 +143,10 @@ fun GeckoBrowserScreen(
     var currentUrl by remember { mutableStateOf(startUrl) }
     var safeRecoveryUrl by remember { mutableStateOf(startUrl) }
     var cleanupBlanking by remember { mutableStateOf(false) }
-    var csfloatQuarantined by remember { mutableStateOf(initialCsfloatQuarantine) }
+    var csfloatQuarantined by remember { mutableStateOf(steamFeaturesEnabled && initialCsfloatQuarantine) }
     var csfloatRestorationPending by remember { mutableStateOf(initialCsfloatRestorationPending) }
-    var trustInspectionComplete by remember { mutableStateOf(false) }
-    var detectorReady by remember { mutableStateOf(false) }
+    var trustInspectionComplete by remember { mutableStateOf(!steamFeaturesEnabled) }
+    var detectorReady by remember { mutableStateOf(!steamFeaturesEnabled) }
     var initialPageLoaded by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf(websiteId) }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -844,7 +845,7 @@ fun GeckoBrowserScreen(
             title = { Text("Allow Steam profile detection?") },
             text = {
                 Text(
-                    "Steam opens in an isolated browser, and your existing WebView sign-in cannot be migrated, " +
+                    "Steam opens in an isolated browser, and your sign-in from an earlier app version cannot be migrated, " +
                         "so you may need to sign in again. This app includes a profile detector limited to " +
                         "https://steamcommunity.com and https://www.steamcommunity.com. It reads only visible " +
                         "public avatar and profile links and sends those values only back to this app through " +
@@ -896,6 +897,7 @@ fun GeckoBrowserScreen(
                         Icon(Icons.Filled.OpenInBrowser, "Open externally")
                     }
                 }
+                if (steamFeaturesEnabled) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1131,6 +1133,7 @@ fun GeckoBrowserScreen(
                     Modifier.padding(8.dp),
                 )
                 updateTestState?.let { Text(it, Modifier.padding(horizontal = 8.dp)) }
+                }
             }
         }
         if (loading) {
@@ -1253,30 +1256,33 @@ fun GeckoBrowserScreen(
                     geckoView.setSession(session)
                     runtime.webExtensionController.setTabActive(session, true)
                     sessionRef = session
-                    runtime.webExtensionController.promptDelegate = promptDelegate
-                    discoverCsfloat()
-
-                    runtime.webExtensionController.ensureBuiltIn(DETECTOR_URI, DETECTOR_EXTENSION_ID).accept(
-                        { extension -> geckoView.post {
-                            if (sessionRef === session && extension?.id == DETECTOR_EXTENSION_ID) {
-                                detectorExtensionRef = extension
-                                session.webExtensionController.setMessageDelegate(
-                                    extension,
-                                    detectorDelegate(extension, session, accountId, context.applicationContext),
-                                    DETECTOR_NATIVE_APP,
-                                )
-                            }
-                            detectorReady = true
-                            maybeLoadInitialPage()
-                        } },
-                        { geckoView.post {
-                            if (sessionRef === session) {
-                                error = "Steam profile image detection is unavailable. You can still sign in and browse."
+                    if (steamFeaturesEnabled) {
+                        runtime.webExtensionController.promptDelegate = promptDelegate
+                        discoverCsfloat()
+                        runtime.webExtensionController.ensureBuiltIn(DETECTOR_URI, DETECTOR_EXTENSION_ID).accept(
+                            { extension -> geckoView.post {
+                                if (sessionRef === session && extension?.id == DETECTOR_EXTENSION_ID) {
+                                    detectorExtensionRef = extension
+                                    session.webExtensionController.setMessageDelegate(
+                                        extension,
+                                        detectorDelegate(extension, session, accountId, context.applicationContext),
+                                        DETECTOR_NATIVE_APP,
+                                    )
+                                }
                                 detectorReady = true
                                 maybeLoadInitialPage()
-                            }
-                        } },
-                    )
+                            } },
+                            { geckoView.post {
+                                if (sessionRef === session) {
+                                    error = "Steam profile image detection is unavailable. You can still sign in and browse."
+                                    detectorReady = true
+                                    maybeLoadInitialPage()
+                                }
+                            } },
+                        )
+                    } else {
+                        maybeLoadInitialPage()
+                    }
                     geckoView
                 },
                 onRelease = { view ->

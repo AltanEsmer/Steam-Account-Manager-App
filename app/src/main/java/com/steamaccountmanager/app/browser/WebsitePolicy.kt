@@ -1,11 +1,5 @@
 package com.steamaccountmanager.app.browser
 
-import android.content.Context
-import android.net.Uri
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.webkit.WebViewClientCompat
 import java.net.URI
 
 /**
@@ -38,55 +32,5 @@ class WebsitePolicy(
             return NavigationDecision.REJECT
         }
         return if (isHostAllowed(uri.host)) NavigationDecision.ALLOW_IN_APP else NavigationDecision.OFFER_EXTERNAL
-    }
-}
-
-/**
- * WebViewClient that consults a [WebsitePolicy] on every navigation and blocks
- * anything outside the allowlist, while still permitting normal in-page
- * navigation, redirects, and resource loads within the allowed domains.
- *
- * Legitimate third-party auth redirects (e.g. a site bouncing through
- * steamcommunity.com/openid) are handled by including that domain in the
- * website's `allowedAuthDomains`, configured per-website -- not by disabling
- * the policy.
- */
-class DomainRestrictedWebViewClient(
-    private val context: Context,
-    private val policy: WebsitePolicy,
-    private val onPageStarted: (String) -> Unit,
-    private val onPageFinished: (String) -> Unit,
-    private val onBlockedNavigation: (Uri) -> Unit,
-    private val onLoadError: (Int, String?) -> Unit,
-) : WebViewClientCompat() {
-
-    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-        val uri = request.url
-        return when (policy.decideNavigation(uri.toString())) {
-            WebsitePolicy.NavigationDecision.ALLOW_IN_APP -> false
-            WebsitePolicy.NavigationDecision.OFFER_EXTERNAL -> {
-                onBlockedNavigation(uri)
-                true
-            }
-            WebsitePolicy.NavigationDecision.REJECT -> true
-        }
-    }
-
-    override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
-        url?.let(onPageStarted)
-    }
-
-    override fun onPageFinished(view: WebView, url: String?) {
-        url?.let(onPageFinished)
-    }
-
-    override fun onReceivedError(
-        view: WebView,
-        request: WebResourceRequest,
-        error: androidx.webkit.WebResourceErrorCompat,
-    ) {
-        if (request.isForMainFrame) {
-            onLoadError(error.errorCode, error.description?.toString())
-        }
     }
 }

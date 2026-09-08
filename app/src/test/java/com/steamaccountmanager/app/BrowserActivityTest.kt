@@ -13,7 +13,7 @@ class BrowserActivityTest {
         val websiteIds = listOf("steam", "csfloat", "csmoney", "skins_com", "csgoempire", "custom_https")
         val identities = websiteIds.map { GeckoProfileIdentity.idFor(SessionIdentifier("account-a", it)) }
 
-        assertTrue(identities.all { it.startsWith("gecko_") })
+        assertTrue(identities.all { it.startsWith("gv_") })
         assertTrue(identities.none { it.startsWith("webview_") })
         assertTrue(identities.size == identities.toSet().size)
         assertNotEquals(

@@ -21,10 +21,8 @@ android {
 
     defaultConfig {
         applicationId = "com.steamaccountmanager.app"
-        // minSdk 28 (Android 9 / Pie) is required because:
-        //  - WebView.setDataDirectorySuffix(), the mechanism this app relies on for
-        //    true per-process WebView storage isolation, was introduced in API 28.
-        //  - Biometric-grade Keystore key attestation and BiometricPrompt-class APIs
+        // minSdk 28 (Android 9 / Pie) is retained because biometric-grade Keystore
+        // key attestation and BiometricPrompt-class APIs
         //    are robust from API 28 onward (AndroidX Biometric back-ports some of this,
         //    but the underlying StrongBox-capable Keystore behavior is far more
         //    consistent from Pie onward).
@@ -109,8 +107,6 @@ dependencies {
     implementation("androidx.room:room-ktx:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
 
-    // WebView extras (WebViewClientCompat / WebResourceErrorCompat / feature checks)
-    implementation("androidx.webkit:webkit:1.11.0")
     implementation("org.mozilla.geckoview:geckoview:153.0.20260810162159")
 
     // Security

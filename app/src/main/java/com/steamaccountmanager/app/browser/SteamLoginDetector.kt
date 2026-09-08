@@ -2,12 +2,11 @@ package com.steamaccountmanager.app.browser
 
 import android.content.Context
 import android.content.Intent
-import android.webkit.WebView
 import java.net.URI
 
 /**
- * Best-effort detection of a successful Steam login inside the isolated Steam
- * WebView session, so the app can automatically fetch the account's avatar
+ * Best-effort detection of a successful Steam login inside the isolated Gecko
+ * session, so the app can automatically fetch the account's avatar
  * (Section 6). This deliberately does NOT call any Steam Web API (which would
  * require an API key / backend) -- it just reads the logged-in page's own DOM,
  * the same information already visible to the user on screen.
@@ -25,20 +24,6 @@ object SteamLoginDetector {
     const val EXTRA_AVATAR_URL = "extra_avatar_url"
     const val EXTRA_STEAM_PROFILE_ID = "extra_steam_profile_id"
 
-    private const val DETECTION_SCRIPT = """
-        (function() {
-            try {
-                var avatarEl = document.querySelector('.playerAvatar img, .persona_name_text_content img, a.user_avatar img');
-                var avatarUrl = avatarEl ? avatarEl.src : null;
-                var profileEl = document.querySelector('a.user_avatar, a.persona_name');
-                var profileUrl = profileEl ? profileEl.href : null;
-                return JSON.stringify({avatarUrl: avatarUrl, profileUrl: profileUrl});
-            } catch (e) {
-                return JSON.stringify({avatarUrl: null, profileUrl: null});
-            }
-        })();
-    """
-
     /** Only worth attempting on steamcommunity.com pages that look like a logged-in view. */
     fun looksLikeLoggedInSteamPage(url: String?): Boolean {
         val uri = safeHttpsUri(url) ?: return false
@@ -47,19 +32,13 @@ object SteamLoginDetector {
         return path == "/" || PROFILE_PATH.matches(path)
     }
 
-    /** Parses only public metadata from either WebView's encoded result or plain extension JSON. */
+    /** Parses only public metadata from the detector extension's JSON message. */
     fun parseResult(raw: String?): SteamProfileResult? {
         if (raw == null || raw.length > MAX_RAW_RESULT_LENGTH) return null
         val json = unwrapJavascriptResult(raw) ?: return null
         val avatarUrl = field(json, "avatarUrl")?.takeIf(::isSafeSteamAvatar)
         val steamProfileId = field(json, "profileUrl")?.let(::validatedSteamProfileId)
         return if (avatarUrl == null && steamProfileId == null) null else SteamProfileResult(avatarUrl, steamProfileId)
-    }
-
-    fun tryDetect(webView: WebView, accountId: String, appContext: Context) {
-        webView.evaluateJavascript(DETECTION_SCRIPT) { rawResult ->
-            parseResult(rawResult)?.send(accountId, appContext)
-        }
     }
 
     fun sendResult(result: SteamProfileResult, accountId: String, appContext: Context) {

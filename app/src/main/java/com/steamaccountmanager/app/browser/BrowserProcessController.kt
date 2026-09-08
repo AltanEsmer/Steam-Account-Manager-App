@@ -17,11 +17,10 @@ import java.util.UUID
  * Opens one [SessionIdentifier] (account + website pair) with an isolated,
  * persistent engine-owned browser profile in the dedicated `:browser` process.
  *
- * Steam uses a deterministic GeckoView profile. Other websites temporarily retain
- * WebView, whose data-directory suffix must be selected before WebView construction.
- * Switching profile identity therefore restarts the worker; reopening the same
+ * Every session uses a deterministic GeckoView profile. Switching profile identity
+ * restarts the worker; reopening the same
  * identity reuses it. By construction, only one browser session is live in memory,
- * while inactive profile state remains on disk under its owning engine.
+ * while inactive profile state remains on disk under GeckoView.
  */
 object BrowserProcessController {
 
@@ -48,14 +47,12 @@ object BrowserProcessController {
         allowedDomains: List<String>,
     ) = routingMutex.withLock {
         val appContext = context.applicationContext
-        val requestedSuffix = sessionId.dataDirectorySuffix
         val requestedSession = isolationIdentity(sessionId)
         var routingToken = UUID.randomUUID().toString()
 
         val authorized = withContext(Dispatchers.IO) {
             val prefs = appContext.getSharedPreferences(ROUTER_PREFS, Context.MODE_PRIVATE)
             val activeSession = prefs.getString(KEY_ACTIVE_SESSION, null)
-                ?: prefs.getString(LEGACY_KEY_ACTIVE_SUFFIX, null)?.let { "webview_$it" }
             val processes = browserProcesses(appContext)
             val exactWorkerRunning = processes.any { it.processName == browserWorkerName(appContext) }
             val cleanupSucceeded = when {
@@ -76,14 +73,12 @@ object BrowserProcessController {
             prefs.edit()
                 .putString(KEY_ACTIVE_SESSION, requestedSession)
                 .putString(KEY_ROUTING_TOKEN, routingToken)
-                .remove(LEGACY_KEY_ACTIVE_SUFFIX)
                 .commit()
         }
         if (!authorized) return@withLock
 
         val intent = Intent(appContext, BrowserActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            putExtra(EXTRA_DATA_DIR_SUFFIX, requestedSuffix)
             putExtra(EXTRA_ACCOUNT_ID, sessionId.accountId)
             putExtra(EXTRA_WEBSITE_ID, sessionId.websiteId)
             putExtra(EXTRA_START_URL, targetUrl)
@@ -262,15 +257,11 @@ object BrowserProcessController {
         }
     }
 
-    private fun isolationIdentity(sessionId: SessionIdentifier): String =
-        if (sessionId.websiteId == STEAM_WEBSITE_ID) GeckoProfileIdentity.idFor(sessionId)
-        else "webview_${sessionId.dataDirectorySuffix}"
+    private fun isolationIdentity(sessionId: SessionIdentifier) = GeckoProfileIdentity.idFor(sessionId)
 
     private fun browserWorkerName(context: Context) = context.packageName + BROWSER_PROCESS_SUFFIX
 
     private const val TAG = "BrowserProcessController"
-    private const val STEAM_WEBSITE_ID = "steam"
-    private const val LEGACY_KEY_ACTIVE_SUFFIX = "active_suffix"
     private const val STABLE_DEATH_POLLS = 3
     private const val BROWSER_PROCESS_SUFFIX = ":browser"
     private val FIXED_GECKO_PROCESS_SUFFIXES = setOf(
@@ -284,7 +275,6 @@ object BrowserProcessController {
         ":zygoteTab_disable_art_image_",
     )
     private val GECKO_INDEXED_PROCESS = Regex("^:(isolatedTab|tab)_disable_art_image_([0-9]|[1-3][0-9])$")
-    const val EXTRA_DATA_DIR_SUFFIX = "extra_data_dir_suffix"
     const val EXTRA_ACCOUNT_ID = "extra_account_id"
     const val EXTRA_WEBSITE_ID = "extra_website_id"
     const val EXTRA_START_URL = "extra_start_url"
