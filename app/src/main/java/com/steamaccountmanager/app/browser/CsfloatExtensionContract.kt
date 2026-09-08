@@ -88,6 +88,15 @@ object CsfloatExtensionContract {
 
 enum class CsfloatPopupState { UNAVAILABLE, AVAILABLE, OPENED, FAILED }
 
+enum class CsfloatTrackingState { ACTIVE, INACTIVE, UNKNOWN, FAILED }
+
+fun csfloatTrackingMessage(state: CsfloatTrackingState): String = when (state) {
+    CsfloatTrackingState.ACTIVE -> "CSFloat tracking: active"
+    CsfloatTrackingState.INACTIVE -> "CSFloat tracking: inactive"
+    CsfloatTrackingState.UNKNOWN -> "CSFloat tracking: unknown; inspect the official popup."
+    CsfloatTrackingState.FAILED -> "CSFloat tracking: failed; retry inspection."
+}
+
 enum class CsfloatDenialState { ABSENT, DISABLED, ENABLED, QUERY_FAILED }
 
 fun csfloatDenialMessage(state: CsfloatDenialState): String = when (state) {
